@@ -36,6 +36,25 @@ echo "── a whole run through the real UI ──"
 "$PY" "$ROOT/testing/run_ui.py" 2>&1 | grep -vE '^127\.0\.0\.1' || fail=1
 
 echo
+echo "── the recipe in the README, run ──"
+# The README tells a collaborator to `shasum` the files and compare against the
+# manifest. That is the whole basis of the claim, so it is executed here rather
+# than described: a recipe nobody runs is a recipe that stops working quietly.
+if [ -f "$ROOT/testing/out/run-manifest.json" ]; then
+  for f in "$ROOT"/testing/out/q*.txt; do
+    [ -e "$f" ] || continue
+    got=$(shasum -a 256 "$f" | cut -d" " -f1)
+    if grep -q "$got" "$ROOT/testing/out/run-manifest.json"; then
+      echo "  ✓ $(basename "$f") → ${got:0:16}… is in the manifest"
+    else
+      echo "  x $(basename "$f") → ${got:0:16}… is NOT in the manifest"; fail=1
+    fi
+  done
+else
+  echo "  x no manifest was exported"; fail=1
+fi
+
+echo
 echo "── the core splits what the browser read ──"
 cargo test -p workbench-core --test browser -- --nocapture 2>&1 | grep -E "^test |skipped" || fail=1
 

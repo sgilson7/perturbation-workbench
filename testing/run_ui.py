@@ -198,6 +198,13 @@ def main():
         page.click("#mclose")
         print(f"  ✓ the query file is named by its own digest ({digest}) and the manifest agrees")
 
+        # Write both out so the shell can run the README's own recipe on them.
+        # A recipe nobody executes is a recipe that stops working quietly.
+        out = ROOT / "testing" / "out"
+        out.mkdir(exist_ok=True)
+        (out / name).write_text(query)
+        (out / "run-manifest.json").write_text(manifest)
+
         # 10. The assignment: typeset, re-opened, hashed, and the manifest
         #     records the digest the file actually has.
         page.click("#exportassignment")
