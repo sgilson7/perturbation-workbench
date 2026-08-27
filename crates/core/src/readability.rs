@@ -14,7 +14,7 @@
 //! same thing. `tests/readability.rs` pins that agreement on the nine base
 //! texts the study actually used.
 //!
-//! It is approximate on mathematics and says so in the README. `f1 : {1,2,3}
+//! It is approximate on mathematics and on code, and says so in the README. `f1 : {1,2,3}
 //! -> {a,b,c}` is not prose and has no syllables; the stripping below removes
 //! the notation that would otherwise be counted as very long words, which is
 //! enough to make a drift measurement meaningful and is not enough to make the
@@ -123,11 +123,15 @@ fn strip_math(text: &str) -> String {
 }
 
 /// Measure a text.
+///
+/// Code is removed before anything is counted — see `markup::prose_only` for
+/// why. A question with no fenced blocks is unaffected, which is what keeps
+/// the study's nine base texts scoring exactly what they scored.
 pub fn analyze(text: &str) -> Metrics {
     if text.trim().is_empty() {
         return Metrics { words: 0, sentences: 1, grade: 0.0, ease: 0.0 };
     }
-    let clean = strip_math(text);
+    let clean = strip_math(&crate::markup::prose_only(text));
 
     // A "sentence" needs more than one word, so a heading or a bare `1.` on its
     // own line does not divide the text and inflate the sentence count.

@@ -1,5 +1,7 @@
 pub mod hash;
+pub mod ingest;
 pub mod manifest;
+pub mod markup;
 pub mod protocol;
 pub mod readability;
 pub mod rubric;

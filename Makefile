@@ -17,6 +17,10 @@ test-ui-setup:
 	@$(ROOT)/.venv-test/bin/playwright install chromium
 	@echo "ready: make test-ui"
 
+## fixtures: extract the local assignment PDFs into ingest fixtures
+fixtures:
+	@python3 $(ROOT)/testing/make_fixtures.py "$(PDF)" $(ROOT)/fixtures/$(NAME).lines.json
+
 ## verify: audit a session or manifest without a browser (make verify RUN=file.json)
 verify:
 	@cargo run -q -p workbench-cli -- verify $(RUN)

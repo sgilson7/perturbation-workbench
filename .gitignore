@@ -12,4 +12,6 @@ testing/out
 *.pdf
 *.docx
 *.jsx
+# ...and text extracted verbatim from them.
+/fixtures/lab3*
 perturbation-workbench-plan.md

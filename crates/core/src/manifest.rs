@@ -131,6 +131,10 @@ pub struct VersionRecord {
     pub words: usize,
     pub guard_tripped: bool,
     pub locked: bool,
+    /// How many fenced code blocks the question carried, not what was in them.
+    /// A reader comparing a CS1 lab against a proof worksheet needs to know
+    /// the difference, and a count is the most that can be said safely.
+    pub code_blocks: usize,
     pub attempts: Vec<AttemptRecord>,
 }
 
@@ -244,6 +248,7 @@ pub fn build(
                 words: metrics.words,
                 guard_tripped: q.guard_of(vi, &limits).is_ok_and(|g| g.tripped()),
                 locked: v.locked(),
+                code_blocks: crate::markup::code_blocks(v.text()),
                 attempts,
             });
         }

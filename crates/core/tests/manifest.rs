@@ -175,6 +175,8 @@ fn a_manifest_records_what_a_collaborator_needs_to_repeat_the_run() {
     assert!(v1.attempts.iter().all(|a| a.query_sha256 == v1.text_sha256));
     assert!(v1.attempts.iter().all(|a| a.pct == 0.0));
     assert_eq!(v1.attempts.iter().map(|a| a.ordinal).collect::<Vec<_>>(), [1, 2, 3]);
+    // A prose question carries no code; a CS1 one would say so here.
+    assert_eq!(v1.code_blocks, 0);
 
     // ...and the digest a reader can reproduce from the exported query file.
     let text = s.question(0).unwrap().version(1).unwrap().text();
@@ -195,6 +197,35 @@ fn a_manifest_records_what_a_collaborator_needs_to_repeat_the_run() {
 
 /// "Resistant" means nothing without the line it was judged against, so the
 /// line travels with it.
+/// The tool is for any CS assignment, so a question can be mostly code. The
+/// manifest says that it was, and says nothing about what the code did.
+#[test]
+fn a_manifest_records_that_a_question_carried_code_but_not_the_code() {
+    let mut s = run();
+    let mut q = question(5);
+    q.rubric_mut().add_chip("Loop terminates", 4).unwrap();
+    s.add_question(q);
+    s.question_mut(0)
+        .unwrap()
+        .add_version(
+            Strategy::Contextual,
+            "Complete the method.\n```java\nint mysteryAccumulator(int[] xs) { return 0; }\n```",
+        )
+        .unwrap();
+    let none: Vec<f64> = vec![0.0; 9];
+    for m in [10u32, 15, 20] {
+        common::stamp(&mut s, 0, m, &none);
+    }
+
+    let m = manifest_of(&s);
+    assert_eq!(m.questions[0].versions[1].code_blocks, 1);
+    assert_eq!(m.questions[0].versions[0].code_blocks, 0);
+    let carried = values_of(&m).into_iter().map(|(_, v)| v).collect::<Vec<_>>().join("\n");
+    for leak in ["mysteryAccumulator", "java", "int[]", "return"] {
+        assert!(!carried.contains(leak), "the manifest leaked {:?}", leak);
+    }
+}
+
 #[test]
 fn a_manifest_records_the_line_it_judged_against() {
     let m = manifest_of(&study_run());
