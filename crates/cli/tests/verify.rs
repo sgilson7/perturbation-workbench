@@ -142,3 +142,30 @@ fn the_advisories_are_reported_without_failing() {
     assert!(out.contains("named 2 different targets"), "{}", out);
     std::fs::remove_file(f).ok();
 }
+
+/// The manifest from a real run of the study's own lab, committed as a
+/// regression fixture.
+///
+/// It is the one artefact of a real run that is safe to publish — the manifest
+/// carries no question text by construction — and it is worth more than any
+/// synthetic case: it is the shape a manifest actually takes when a human runs
+/// the protocol for an afternoon, with the mistakes and the changed minds in
+/// it. If a later change to `verify` or `manifest` starts rejecting it,
+/// something that used to be provable no longer is.
+#[test]
+fn the_recorded_run_still_verifies() {
+    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../fixtures/example_run.json");
+    let Ok(raw) = std::fs::read_to_string(path) else {
+        eprintln!("skipped: no recorded run at {} yet", path);
+        return;
+    };
+    let m: workbench_core::manifest::Manifest =
+        serde_json::from_str(&raw).expect("the recorded run should still parse");
+    let report = workbench_core::manifest::audit(&m);
+    assert!(report.passed(), "the recorded run no longer verifies: {:?}", report.blocking());
+    assert!(report.questions > 0);
+    assert!(m.target.is_some(), "a run with no named target is not evidence");
+
+    // And it is still safe to have committed.
+    assert!(!m.contains_question_text);
+}
