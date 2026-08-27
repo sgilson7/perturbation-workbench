@@ -8,8 +8,9 @@ Under construction — the browser app arrives with milestone 4. The protocol
 engine is in `crates/core` and runs under `cargo test` today.
 
 ```sh
-make test    # the protocol test suite (native, no browser needed)
-make help    # every command
+make test                       # the protocol test suite (native, no browser needed)
+make verify RUN=run-manifest.json   # audit a run from the command line
+make help                       # every command
 ```
 
 ## Licence

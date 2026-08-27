@@ -13,9 +13,10 @@
 
 #![allow(dead_code)]
 
-use workbench_core::hash::{Sha256Hex, Timestamp};
+use workbench_core::hash::{BuildId, Sha256Hex, Timestamp};
 use workbench_core::protocol::{Question, Settings};
 use workbench_core::rubric::{ChipId, Percent, Scores};
+use workbench_core::session::{Access, Session};
 
 /// One base question: its number, its title, and the text the study used.
 pub struct Base {
@@ -341,4 +342,60 @@ pub fn chip(q: &Question, n: usize) -> ChipId {
 
 pub fn settings(threshold: f64) -> Settings {
     Settings { threshold: pct(threshold), ..Settings::default() }
+}
+
+// ------------------------------------------------------------------ runs
+
+pub fn build_id() -> BuildId {
+    BuildId::parse("c8878585").expect("a build id")
+}
+
+/// A run with an input document and a named target, ready to be stamped.
+pub fn run() -> Session {
+    let mut s = Session::new(Settings::default());
+    s.set_input(digest("lab3-part2.pdf"), 22);
+    s.set_target("gemini-2.5-flash", Access::Institutional, true, at(0)).unwrap();
+    s
+}
+
+/// Mark a question's current chips, in order.
+pub fn marks(s: &Session, q: usize, vals: &[f64]) -> Scores {
+    s.question(q)
+        .unwrap()
+        .rubric()
+        .current()
+        .chips
+        .iter()
+        .zip(vals)
+        .map(|(c, v)| (c.id.clone(), pct(*v)))
+        .collect()
+}
+
+/// Stamp one attempt on the latest version of question `q`.
+pub fn stamp(s: &mut Session, q: usize, minute: u32, vals: &[f64]) {
+    let version = s.question(q).unwrap().latest_ordinal();
+    let scores = marks(s, q, vals);
+    s.stamp(q, version, at(minute), digest(&format!("q{}-{}", q, minute)), scores)
+        .expect("the stamp should have been accepted");
+}
+
+/// A complete, clean run: one question taken to Step 8b on its first
+/// perturbation, exactly as the protocol prescribes.
+pub fn resistant_run() -> Session {
+    let mut s = run();
+    s.add_question(simple());
+    // Baseline passes, so the question is perturbed (Step 4 -> Step 5).
+    stamp(&mut s, 0, 1, &[100.0, 100.0]);
+    s.question_mut(0)
+        .unwrap()
+        .add_version(
+            workbench_core::protocol::Strategy::Spatial,
+            "Prove that two plus two is four, using only the grid drawn above.",
+        )
+        .unwrap();
+    // Three failures on the perturbed version (Step 8a -> Step 8b).
+    for m in [10u32, 15, 20] {
+        stamp(&mut s, 0, m, &[100.0, 0.0]);
+    }
+    s
 }

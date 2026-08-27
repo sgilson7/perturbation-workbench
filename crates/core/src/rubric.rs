@@ -287,7 +287,7 @@ pub struct AttemptRef {
 /// hand-edited session file would most want to add a field to is not a trade
 /// worth making for tidier JSON.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub enum ChipKind {
     /// Something the answer is meant to demonstrate.
     Assessed,

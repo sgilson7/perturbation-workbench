@@ -5,7 +5,7 @@ mod common;
 use common::{at, digest, pct, simple};
 use workbench_core::protocol::{Settings, Status, Strategy};
 use workbench_core::rubric::Scores;
-use workbench_core::session::{Session, SessionError, SESSION_SCHEMA};
+use workbench_core::session::{Access, Session, SessionError, SESSION_SCHEMA};
 
 fn marks(s: &Session, q: usize, vals: &[f64]) -> Scores {
     s.question(q)
@@ -22,7 +22,7 @@ fn marks(s: &Session, q: usize, vals: &[f64]) -> Scores {
 fn started_run() -> Session {
     let mut s = Session::new(Settings::default());
     s.set_input(digest("the lab pdf"), 22);
-    s.set_target("gemini-2.5-flash", "NCSU Google Workspace licence", true, at(0)).unwrap();
+    s.set_target("gemini-2.5-flash", Access::Institutional, true, at(0)).unwrap();
     s.add_question(simple());
     s
 }
@@ -43,7 +43,7 @@ fn a_run_survives_being_paused_and_picked_up_elsewhere() {
     assert_eq!(back.status(0), Ok(Status::Untested));
     assert_eq!(back.question(0).unwrap().status_of(0, pct(60.0)), Ok(Status::Resistant));
     assert_eq!(back.input().unwrap().pages, 22);
-    assert_eq!(back.target().unwrap().model, "gemini-2.5-flash");
+    assert_eq!(back.target().unwrap().model.as_str(), "gemini-2.5-flash");
 }
 
 /// The file says what it is, so nobody has to guess whether it is the one that
@@ -94,8 +94,8 @@ fn nothing_can_be_stamped_before_the_target_is_named() {
     assert_eq!(s.stamp(0, 0, at(1), digest("r"), scores), Err(SessionError::NoTarget));
     assert!(!s.started());
 
-    assert_eq!(s.set_target("  ", "", true, at(0)), Err(SessionError::EmptyModel));
-    s.set_target("gemini-2.5-flash", "", true, at(0)).unwrap();
+    assert_eq!(s.set_target("  ", Access::Unspecified, true, at(0)), Err(SessionError::EmptyModel));
+    s.set_target("gemini-2.5-flash", Access::Consumer, true, at(0)).unwrap();
     let scores = marks(&s, 0, &[100.0, 0.0]);
     assert_eq!(s.stamp(0, 0, at(1), digest("r"), scores), Ok(1));
     assert!(s.started());
@@ -110,13 +110,13 @@ fn changing_the_target_leaves_a_trace() {
 
     // Re-stating the same target is not a change; recording it as one would
     // produce an advisory about something that did not happen.
-    s.set_target("gemini-2.5-flash", "NCSU Google Workspace licence", true, at(5)).unwrap();
+    s.set_target("gemini-2.5-flash", Access::Institutional, true, at(5)).unwrap();
     assert_eq!(s.targets().len(), 1);
 
-    s.set_target("gemini-2.5-pro", "NCSU Google Workspace licence", true, at(30)).unwrap();
+    s.set_target("gemini-2.5-pro", Access::Institutional, true, at(30)).unwrap();
     assert_eq!(s.targets().len(), 2);
-    assert_eq!(s.target().unwrap().model, "gemini-2.5-pro");
-    assert_eq!(s.targets()[0].model, "gemini-2.5-flash");
+    assert_eq!(s.target().unwrap().model.as_str(), "gemini-2.5-pro");
+    assert_eq!(s.targets()[0].model.as_str(), "gemini-2.5-flash");
 }
 
 #[test]

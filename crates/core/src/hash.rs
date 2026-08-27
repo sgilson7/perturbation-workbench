@@ -139,6 +139,10 @@ pub enum InvalidId {
     NotAHash,
     /// Not `YYYY-MM-DDTHH:MM:SSZ`, or a field out of range.
     NotAnInstant,
+    /// Too long, or made of characters a model name is not made of.
+    NotAModel,
+    /// Not the short hex hash a build is identified by.
+    NotABuildId,
 }
 
 /// A SHA-256 digest, in hex, that has been checked to be one.
@@ -186,6 +190,81 @@ impl<'de> serde::Deserialize<'de> for Sha256Hex {
     fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
         let s = String::deserialize(d)?;
         Sha256Hex::parse(&s).map_err(|_| serde::de::Error::custom("not a sha-256 hex digest"))
+    }
+}
+
+/// The name of the model a run was tested against.
+///
+/// The one piece of prose the manifest keeps, because a run that does not name
+/// its target is not evidence of anything: "resistant" is a claim about a
+/// specific model on a specific day. It is bounded and filtered rather than
+/// trusted — sixty-four characters, no newlines, and none of the punctuation
+/// that prose is made of — so the field that has to hold `gemini-2.5-flash`
+/// cannot be made to hold a question instead.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, serde::Serialize)]
+pub struct ModelId(String);
+
+impl ModelId {
+    pub fn parse(s: &str) -> Result<ModelId, InvalidId> {
+        let t = s.trim();
+        let bounded = (1..=64).contains(&t.len());
+        let alphabet = t
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'.' | b'_' | b':' | b'/' | b' '));
+        let ends = t.starts_with(|c: char| c.is_ascii_alphanumeric())
+            && t.ends_with(|c: char| c.is_ascii_alphanumeric());
+        if bounded && alphabet && ends {
+            Ok(ModelId(t.to_string()))
+        } else {
+            Err(InvalidId::NotAModel)
+        }
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl fmt::Display for ModelId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for ModelId {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        let s = String::deserialize(d)?;
+        ModelId::parse(&s).map_err(|_| serde::de::Error::custom("not a model identifier"))
+    }
+}
+
+/// The eight-character build hash `package-web.sh` stamps into the page.
+///
+/// Validated as hex for the same reason everything else here is: it is a
+/// caller-supplied string in a file that is meant to carry none.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct BuildId(String);
+
+impl BuildId {
+    pub fn parse(s: &str) -> Result<BuildId, InvalidId> {
+        let ok = (6..=16).contains(&s.len())
+            && s.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b));
+        if ok {
+            Ok(BuildId(s.to_string()))
+        } else {
+            Err(InvalidId::NotABuildId)
+        }
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for BuildId {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        let s = String::deserialize(d)?;
+        BuildId::parse(&s).map_err(|_| serde::de::Error::custom("not a build id"))
     }
 }
 

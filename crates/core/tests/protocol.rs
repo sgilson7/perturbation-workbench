@@ -71,7 +71,7 @@ fn the_transition_table_agrees_with_the_prototype() {
 #[test]
 fn an_untested_version_is_untested() {
     let q = simple();
-    assert_eq!(q.status(thr()), Status::Untested);
+    assert_eq!(q.status(thr()), Ok(Status::Untested));
     assert!(!q.base().locked());
     assert!(!q.frozen());
 }
@@ -80,19 +80,19 @@ fn an_untested_version_is_untested() {
 fn a_first_attempt_at_the_threshold_is_not_resistant() {
     let mut q = simple();
     stamp(&mut q, 0, EDGE).unwrap();
-    assert_eq!(q.status(thr()), Status::NotResistant { pct: 60.0 });
-    assert!(!q.status(thr()).is_resistant());
+    assert_eq!(q.status(thr()), Ok(Status::NotResistant { pct: 60.0 }));
+    assert!(!q.status(thr()).unwrap().is_resistant());
 }
 
 #[test]
 fn three_failures_are_resistant_and_two_are_not() {
     let mut q = simple();
     assert_eq!(stamp(&mut q, 0, FAIL), Ok(1));
-    assert_eq!(q.status(thr()), Status::Testing { attempts: 1 });
+    assert_eq!(q.status(thr()), Ok(Status::Testing { attempts: 1 }));
     assert_eq!(stamp(&mut q, 5, FAIL), Ok(2));
-    assert_eq!(q.status(thr()), Status::Testing { attempts: 2 });
+    assert_eq!(q.status(thr()), Ok(Status::Testing { attempts: 2 }));
     assert_eq!(stamp(&mut q, 9, FAIL), Ok(3));
-    assert_eq!(q.status(thr()), Status::Resistant);
+    assert_eq!(q.status(thr()), Ok(Status::Resistant));
     assert_eq!(q.pcts(0), Ok(vec![20.0, 20.0, 20.0]));
 }
 
@@ -104,8 +104,8 @@ fn a_later_pass_is_a_false_negative_caught() {
     stamp(&mut q, 0, FAIL).unwrap();
     stamp(&mut q, 5, FAIL).unwrap();
     stamp(&mut q, 9, PASS).unwrap();
-    assert_eq!(q.status(thr()), Status::Inconsistent { at: 3 });
-    assert!(!q.status(thr()).is_resistant());
+    assert_eq!(q.status(thr()), Ok(Status::Inconsistent { at: 3 }));
+    assert!(!q.status(thr()).unwrap().is_resistant());
 }
 
 // ------------------------------------------------------------ the refusals
@@ -180,7 +180,7 @@ fn a_perturbation_leaves_the_earlier_attempts_intact() {
     assert_eq!(q.version(1).unwrap().strategy(), Some(Strategy::Contextual));
     assert_eq!(q.base().strategy(), None);
     // The question is whatever it currently says; the history is still there.
-    assert_eq!(q.status(thr()), Status::Untested);
+    assert_eq!(q.status(thr()), Ok(Status::Untested));
     assert_eq!(q.status_of(0, thr()), Ok(Status::NotResistant { pct: 100.0 }));
 }
 
@@ -352,7 +352,7 @@ fn nothing_derivable_is_stored() {
     }
     // ...and the derivations still work over what *is* stored.
     let back: Question = serde_json::from_str(&json).unwrap();
-    assert_eq!(back.status(thr()), Status::Untested);
+    assert_eq!(back.status(thr()), Ok(Status::Untested));
     assert_eq!(back.status_of(0, thr()), Ok(Status::Testing { attempts: 2 }));
     assert_eq!(back.version(0).unwrap().text_sha256(), q.base().text_sha256());
     assert!(back.version(0).unwrap().locked());

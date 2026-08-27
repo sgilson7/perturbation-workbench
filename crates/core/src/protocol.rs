@@ -58,7 +58,12 @@ impl Strategy {
 }
 
 /// Where one version of a question stands. Always derived, never stored.
-#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize)]
+///
+/// It deserialises as well as serialises, which is not a contradiction: a
+/// `Status` is never a field of a run, but it *is* a value a verification
+/// finding carries into a manifest, and a manifest has to be readable back to
+/// be checkable.
+#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase", tag = "status")]
 pub enum Status {
     /// Step 3. No attempt has been graded.
@@ -190,6 +195,15 @@ impl From<RubricError> for ProtocolError {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Attempt {
     at: Timestamp,
+    /// SHA-256 of the version text as it stood when this attempt was prompted.
+    ///
+    /// Not a duplicate of the version's own hash: that one says what the query
+    /// *is*, this one says what was actually sent. They agree in every run this
+    /// module can produce, because a prompted version is locked — and the whole
+    /// point of recording both is that a session file edited outside it cannot
+    /// make them agree without editing all three attempts to match. "The same
+    /// bytes were prompted three times" is not checkable without it.
+    query: Sha256Hex,
     /// SHA-256 of the model's response. There is no field for the response
     /// itself: the text is hashed in the browser and dropped, so a run log
     /// cannot become a transcript of somebody's chatbot session.
@@ -208,6 +222,10 @@ pub struct Attempt {
 impl Attempt {
     pub fn at(&self) -> &Timestamp {
         &self.at
+    }
+    /// The bytes that were sent, as they stood at the time.
+    pub fn query(&self) -> &Sha256Hex {
+        &self.query
     }
     pub fn response(&self) -> &Sha256Hex {
         &self.response
@@ -421,7 +439,15 @@ impl Question {
 
         self.rubric.freeze(at.clone());
         let v = &mut self.versions[version];
-        v.attempts.push(Attempt { at, response, rubric_revision, scores, notes: Vec::new() });
+        let query = Sha256Hex::of(v.text.as_bytes());
+        v.attempts.push(Attempt {
+            at,
+            query,
+            response,
+            rubric_revision,
+            scores,
+            notes: Vec::new(),
+        });
         Ok(v.attempts.len())
     }
 
@@ -481,9 +507,16 @@ impl Question {
 
     /// The question's status is its latest version's status. Earlier versions
     /// are history; the question is whatever it currently says.
-    pub fn status(&self, threshold: Percent) -> Status {
+    ///
+    /// Fallible, which looks like pedantry and is not: re-deriving a status
+    /// means re-grading every attempt against the revision it names, and a
+    /// session file edited outside this module can name a revision that is not
+    /// in it. An infallible signature here would have to panic on that input,
+    /// and a panic inside wasm reaches the user as "unreachable executed" with
+    /// no indication of what broke. `verify` turns the same condition into a
+    /// blocking finding that says exactly which attempt is unreadable.
+    pub fn status(&self, threshold: Percent) -> Result<Status, ProtocolError> {
         self.status_of(self.latest_ordinal(), threshold)
-            .expect("the latest version always exists")
     }
 
     /// How this version reads against the base text it descends from.

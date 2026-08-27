@@ -16,7 +16,7 @@
 //! rather than overwritten, so switching models halfway through leaves a trace
 //! instead of leaving a tidy file that quietly means two different things.
 
-use crate::hash::{Sha256Hex, Timestamp};
+use crate::hash::{ModelId, Sha256Hex, Timestamp};
 use crate::protocol::{ProtocolError, Question, Settings, Status};
 use crate::rubric::Scores;
 
@@ -74,6 +74,7 @@ impl<'de> serde::Deserialize<'de> for Note {
 pub enum SessionError {
     /// Nothing can be stamped until the run says what it is testing against.
     NoTarget,
+    /// Blank, too long, or not shaped like a model name.
     EmptyModel,
     NoSuchQuestion(usize),
     Protocol(ProtocolError),
@@ -93,19 +94,33 @@ pub struct Input {
     pub pages: usize,
 }
 
-/// The model a run is being tested against.
+/// How the instructor reached the model.
 ///
-/// `model` is the one piece of free text the manifest keeps, because a run
-/// that does not name its target is not evidence of anything. `access`
-/// describes how the instructor reached it — a licensed workspace account
-/// behaves differently from a public free tier, and a collaborator repeating
-/// the run needs to know which.
+/// An enum rather than the sentence it replaces ("NCSU Google Workspace
+/// license"). It matters to a collaborator repeating the run — a licensed
+/// workspace account and a consumer free tier are not the same model in
+/// practice — and it is the only shape in which that fact can travel into a
+/// manifest that is built to carry no prose.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum Access {
+    /// A licensed account provided by an institution, as the study used.
+    Institutional,
+    /// A personal account, free or paid.
+    Consumer,
+    /// The provider's API rather than the chat product students see.
+    Api,
+    #[default]
+    Unspecified,
+}
+
+/// The model a run is being tested against.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Target {
-    pub model: String,
+    pub model: ModelId,
     #[serde(default)]
-    pub access: String,
+    pub access: Access,
     /// Step 7: each attempt goes to a distinct instance, so context cannot
     /// carry over between prompts.
     pub fresh_instance_per_attempt: bool,
@@ -171,19 +186,12 @@ impl Session {
     pub fn set_target(
         &mut self,
         model: &str,
-        access: &str,
+        access: Access,
         fresh_instance_per_attempt: bool,
         at: Timestamp,
     ) -> Result<(), SessionError> {
-        if model.trim().is_empty() {
-            return Err(SessionError::EmptyModel);
-        }
-        let next = Target {
-            model: model.trim().to_string(),
-            access: access.trim().to_string(),
-            fresh_instance_per_attempt,
-            at,
-        };
+        let model = ModelId::parse(model).map_err(|_| SessionError::EmptyModel)?;
+        let next = Target { model, access, fresh_instance_per_attempt, at };
         // Re-stating the same target is not a change, and recording it as one
         // would produce an advisory about something that did not happen.
         if let Some(current) = self.targets.last() {
@@ -242,14 +250,14 @@ impl Session {
     }
 
     pub fn status(&self, question: usize) -> Result<Status, SessionError> {
-        Ok(self.question(question)?.status(self.settings.threshold))
+        Ok(self.question(question)?.status(self.settings.threshold)?)
     }
 
     /// How many questions have reached Step 8b.
     pub fn resistant(&self) -> usize {
         self.questions
             .iter()
-            .filter(|q| q.status(self.settings.threshold).is_resistant())
+            .filter(|q| q.status(self.settings.threshold).is_ok_and(Status::is_resistant))
             .count()
     }
 }

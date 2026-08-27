@@ -17,7 +17,7 @@ test-ui-setup:
 	@$(ROOT)/.venv-test/bin/playwright install chromium
 	@echo "ready: make test-ui"
 
-## verify: check a run manifest without a browser
+## verify: audit a session or manifest without a browser (make verify RUN=file.json)
 verify:
 	@cargo run -q -p workbench-cli -- verify $(RUN)
 
