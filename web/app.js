@@ -385,8 +385,20 @@ function renderStage() {
       <div class="stamps">
         ${[0, 1, 2].map((i) => {
           const a = ver.attempts[i];
-          if (!a) return `<div class="stamp blank"><span class="n">attempt ${i + 1}</span>
-            <span class="pct">—</span><span class="when">not run</span></div>`;
+          if (!a) {
+            // The next unrun slot is the way into the grading panel. Without
+            // this the slots look like buttons and are not, which is exactly
+            // the wrong way round.
+            const next = i === ver.attempts.length;
+            if (next && ver.canStamp) {
+              return `<button class="stamp blank next" id="gradenext">
+                <span class="n">attempt ${i + 1}</span>
+                <span class="pct">Grade it</span>
+                <span class="when">paste the response</span></button>`;
+            }
+            return `<div class="stamp blank"><span class="n">attempt ${i + 1}</span>
+              <span class="pct">—</span><span class="when">not run</span></div>`;
+          }
           return `<div class="stamp bar-${a.metThreshold ? 'bad' : 'good'}">
             <span class="n">attempt ${a.ordinal} · rubric r${a.rubricRevision}</span>
             <span class="pct tone-${a.metThreshold ? 'bad' : 'good'}">${a.pct}%</span>
@@ -396,14 +408,33 @@ function renderStage() {
       </div>
     </div>
 
-    ${ver.canStamp ? gradingPanel(q, ver) : ''}
+    ${ver.canStamp ? gradingPanel(q, ver) : blockedPanel(ver)}
     ${benchPanel(q)}`;
 
   paint($('stage'), html, () => {
     for (const el of $('stage').querySelectorAll('.tab[data-v]')) {
       el.onclick = () => { ui.v = +el.dataset.v; ui.marks = {}; render(); };
     }
-    $('copy').onclick = copyQuery;
+      $('copy').onclick = copyQuery;
+    if ($('gradenext')) {
+      $('gradenext').onclick = () => {
+        const panel = $('stage').querySelector('.chips');
+        panel?.scrollIntoView({ block: 'center' });
+        $('response')?.focus();
+      };
+    }
+    if ($('gotorubric')) {
+      $('gotorubric').onclick = () => {
+        $('chiplabel')?.scrollIntoView({ block: 'center' });
+        $('chiplabel')?.focus();
+      };
+    }
+    if ($('gotolatest')) {
+      $('gotolatest').onclick = () => {
+        ui.v = ui.view.questions[ui.q].versions.length - 1;
+        render();
+      };
+    }
     if ($('savetext')) {
       $('savetext').onclick = () =>
         attempt(() => ui.wb.editVersion(ui.q, ui.v, $('query').value));
@@ -432,6 +463,35 @@ function grow(el) {
   };
   el.addEventListener('input', fit);
   fit();
+}
+
+/// Why there is no grading panel, and what to do about it.
+///
+/// An empty space is not an explanation, and the case that matters most is the
+/// first screen a new user sees: a question ingested from a PDF has no rubric
+/// yet, deliberately, and nothing else on the page says that grading is waiting
+/// on one.
+function blockedPanel(ver) {
+    const b = ver.stampBlocked;
+    if (!b) return '';
+    const heads = {
+      noRubric: 'Grading needs a rubric first',
+      notLatest: 'This is an earlier version',
+      decided: 'This version is decided',
+      attemptLimit: 'Three attempts used',
+    };
+    const action = {
+      noRubric: '<button class="btn primary" id="gotorubric">Add the first chip</button>',
+      notLatest: '<button class="btn" id="gotolatest">Go to the latest version</button>',
+    }[b.blocked] || '';
+    return `
+    <div class="card blocked">
+      <div class="cardhead">
+        <h2>${esc(heads[b.blocked] || 'Not gradable')}</h2>
+        ${action}
+      </div>
+      <p class="sidenote">${esc(ver.stampBlockedWhy)}</p>
+    </div>`;
 }
 
 function gradingPanel(q, ver) {

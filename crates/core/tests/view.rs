@@ -6,7 +6,7 @@ use common::{at, digest, marks, question, resistant_run, run, simple, stamp};
 use workbench_core::protocol::{Status, Strategy, Tone};
 use workbench_core::rubric::AttemptRef;
 use workbench_core::session::Session;
-use workbench_core::view::view;
+use workbench_core::view::{view, StampBlocked};
 
 #[test]
 fn a_fresh_run_offers_the_three_strategies_and_nothing_to_export() {
@@ -85,6 +85,66 @@ fn a_question_with_no_rubric_yet_cannot_be_stamped() {
 
     s.question_mut(0).unwrap().rubric_mut().add_chip("Names the nodes", 5).unwrap();
     assert!(view(&s).questions[0].versions[0].can_stamp);
+}
+
+/// The absence of a grading panel is not an explanation. A question ingested
+/// from a PDF starts with no rubric — deliberately, since nobody's marking
+/// scheme can be guessed — so the panel is missing on the very first screen a
+/// new user sees, and something has to say why.
+#[test]
+fn a_version_that_cannot_be_graded_says_why_not() {
+    let mut s = run();
+    s.add_question(
+        workbench_core::protocol::Question::new(1, "Blank", "Describe a linked list.").unwrap(),
+    );
+
+    let blocked = |s: &Session, v: usize| view(s).questions[0].versions[v].stamp_blocked;
+
+    // The first thing missing on a fresh question.
+    assert_eq!(blocked(&s, 0), Some(StampBlocked::NoRubric));
+    s.question_mut(0).unwrap().rubric_mut().add_chip("Names the nodes", 5).unwrap();
+    s.question_mut(0).unwrap().rubric_mut().add_chip("Explains traversal", 5).unwrap();
+    assert_eq!(blocked(&s, 0), None);
+
+    // Decided: the next move is a perturbation, not another prompt.
+    stamp(&mut s, 0, 10, &[100.0, 100.0]);
+    assert_eq!(blocked(&s, 0), Some(StampBlocked::Decided));
+
+    // On an older version, being on an older version explains everything else.
+    s.question_mut(0).unwrap().add_version(Strategy::Spatial, "With a diagram.").unwrap();
+    assert_eq!(blocked(&s, 0), Some(StampBlocked::NotLatest { latest: 1 }));
+    assert_eq!(blocked(&s, 1), None);
+
+    // Three is the protocol.
+    for m in [20u32, 25, 30] {
+        stamp(&mut s, 0, m, &[0.0, 0.0]);
+    }
+    assert_eq!(blocked(&s, 1), Some(StampBlocked::AttemptLimit));
+
+    // Every reason carries the thing to do about it.
+    for b in [
+        StampBlocked::NoRubric,
+        StampBlocked::NotLatest { latest: 1 },
+        StampBlocked::Decided,
+        StampBlocked::AttemptLimit,
+    ] {
+        assert!(!b.remedy().is_empty());
+    }
+}
+
+/// `can_stamp` and `stamp_blocked` are two views of one fact and must not be
+/// able to disagree.
+#[test]
+fn the_reason_is_present_exactly_when_grading_is_not() {
+    let mut s = resistant_run();
+    s.add_question(question(4));
+    s.add_question(simple());
+    stamp(&mut s, 2, 5, &[100.0, 0.0]);
+    for q in &view(&s).questions {
+        for v in &q.versions {
+            assert_eq!(v.can_stamp, v.stamp_blocked.is_none(), "q{} v{}", q.ordinal, v.ordinal);
+        }
+    }
 }
 
 /// Reaching for something you have not tried is the whole idea of Step 5.

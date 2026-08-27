@@ -107,10 +107,16 @@ def main():
         expect(page.locator(".qcard .tag")).to_have_text("UNTESTED")
         print("  ✓ a typed question starts the run")
 
-        # A question with no rubric cannot be graded, and the panel says so by
-        # not being there.
+        # A question with no rubric cannot be graded — and the page has to say
+        # so. An empty space where the panel would be is not an explanation,
+        # and it is the first screen a new user sees.
         if page.locator("#stamp").count():
             problems.append("the grading panel opened with an empty rubric")
+        expect(page.locator(".card.blocked h2")).to_have_text("Grading needs a rubric first")
+        page.click("#gotorubric")
+        if page.evaluate("() => document.activeElement.id") != "chiplabel":
+            problems.append("the remedy did not put the cursor in the chip field")
+        print("  ✓ a question with no rubric says why it cannot be graded")
 
         # 3. Build a rubric out of chips.
         for label, points in [("Returns the sum", 6), ("States the running time", 2),
@@ -121,6 +127,13 @@ def main():
             page.wait_for_timeout(60)
         expect(page.locator(".side .editrow input[data-f=label]")).to_have_count(3)
         print("  ✓ a rubric built chip by chip, 10 points")
+
+        # And the way into grading is a control, not a guess. The attempt
+        # slots used to look like buttons and do nothing.
+        expect(page.locator("#gradenext")).to_be_visible()
+        page.click("#gradenext")
+        expect(page.locator("#response")).to_be_visible()
+        print("  ✓ the next attempt slot opens the grading panel")
 
         # 4. Nothing can be stamped before the target is named.
         expect(page.locator("#stamp")).to_be_disabled()

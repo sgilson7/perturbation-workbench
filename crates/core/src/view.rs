@@ -42,6 +42,53 @@ pub struct AttemptView {
     pub penalties_derived: usize,
 }
 
+/// Why this version cannot take an attempt right now.
+///
+/// The absence of a grading panel is not an explanation. A question ingested
+/// from a PDF starts with no rubric, which is deliberate — nobody's marking
+/// scheme can be guessed — but it means the panel is missing on the very first
+/// screen a new user sees, with nothing to say why or what to do about it.
+///
+/// So the reason is a value rather than an inference. `can_stamp` says whether;
+/// this says why not, and the page prints it where the panel would have been.
+#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase", tag = "blocked")]
+pub enum StampBlocked {
+    /// No chips yet. A question with no rubric cannot be graded, and a
+    /// percentage over nothing is not a number.
+    NoRubric,
+    /// An older version is on screen. Attempts land on the latest one.
+    NotLatest { latest: usize },
+    /// Resistant, not resistant, or inconsistent — the protocol's next move is
+    /// a perturbation, not another prompt.
+    Decided,
+    /// Three attempts used.
+    AttemptLimit,
+}
+
+impl StampBlocked {
+    /// What to do about it, in the words the page shows.
+    pub fn remedy(self) -> &'static str {
+        match self {
+            StampBlocked::NoRubric => {
+                "Add at least one rubric chip in the panel on the right. One chip is one \
+                 atomistic thing the answer either shows or does not; grading needs at least one."
+            }
+            StampBlocked::NotLatest { .. } => {
+                "You are looking at an earlier version. Its attempts are history — select the \
+                 latest version above to grade a new one."
+            }
+            StampBlocked::Decided => {
+                "This version is decided. The protocol's next move is a perturbation, on the \
+                 bench below."
+            }
+            StampBlocked::AttemptLimit => {
+                "Three attempts is the protocol. Perturb the question on the bench below."
+            }
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct VersionView {
@@ -62,6 +109,13 @@ pub struct VersionView {
     pub attempts: Vec<AttemptView>,
     /// Whether the grading panel should be live.
     pub can_stamp: bool,
+    /// If not, why not. `None` exactly when `can_stamp` is true.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stamp_blocked: Option<StampBlocked>,
+    /// What to do about it, in words. Here rather than in the stylesheet's
+    /// neighbouring script because the remedy is protocol advice.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stamp_blocked_why: Option<&'static str>,
     pub attempts_left: usize,
     /// Whether the version can still be edited in place, or needs a new one.
     pub editable: bool,
@@ -199,6 +253,22 @@ fn question_view(q: &Question, settings: &Settings) -> QuestionView {
         .enumerate()
         .map(|(vi, v)| {
             let status = q.status_of(vi, threshold).unwrap_or(Status::Untested);
+
+            // In the order a user would hit them: the rubric is the first
+            // thing missing on a fresh question, and being on an old version
+            // explains everything else that would otherwise look wrong.
+            let blocked = if current.chips.is_empty() {
+                Some(StampBlocked::NoRubric)
+            } else if vi != latest {
+                Some(StampBlocked::NotLatest { latest })
+            } else if v.attempts().len() >= MAX_ATTEMPTS {
+                Some(StampBlocked::AttemptLimit)
+            } else if !status.accepts_attempt() {
+                Some(StampBlocked::Decided)
+            } else {
+                None
+            };
+
             let attempts: Vec<AttemptView> = v
                 .attempts()
                 .iter()
@@ -242,12 +312,11 @@ fn question_view(q: &Question, settings: &Settings) -> QuestionView {
                 code_blocks: code_blocks(v.text()),
                 status,
                 // Only the latest version can take an attempt, and only while
-                // it is undecided and under the cap. The button is disabled
-                // here, not in the front end.
-                can_stamp: vi == latest
-                    && status.accepts_attempt()
-                    && v.attempts().len() < MAX_ATTEMPTS
-                    && !current.chips.is_empty(),
+                // it is undecided and under the cap. Decided here, not in the
+                // front end — and the reason is decided here too.
+                can_stamp: blocked.is_none(),
+                stamp_blocked: blocked,
+                stamp_blocked_why: blocked.map(StampBlocked::remedy),
                 attempts_left: MAX_ATTEMPTS.saturating_sub(v.attempts().len()),
                 editable: !v.locked(),
                 attempts,

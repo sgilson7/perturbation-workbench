@@ -144,6 +144,51 @@ fn a_code_run_is_dedented_to_its_own_left_edge() {
     assert!(out.starts_with("Complete the method:"));
 }
 
+/// pdf.js's "monospace" is a guess about the font, and in a document with any
+/// mathematics in it the guess is wrong constantly. On the study's own lab
+/// every monospaced line it reported was a LaTeX superscript or a checkbox
+/// glyph — thirteen of them, none code — and each one opened a fence in the
+/// middle of a question.
+#[test]
+fn a_stray_maths_glyph_is_not_a_code_block() {
+    // `n²` extracted as a lone line reading `2`, which is what actually
+    // happened on every exponent in the lab.
+    let lines = [
+        ("Part 2 Prove that n squared is even.".to_string(), false),
+        ("                    2".to_string(), true),
+        ("Part 3 State the contrapositive.".to_string(), false),
+    ];
+    let out = fence_monospace(&lines);
+    assert_eq!(code_blocks(&out), 0, "{}", out);
+    assert!(!out.contains("```"), "{}", out);
+
+    // Two adjacent exponent fragments are still not code: no letters.
+    let lines = [
+        ("Prove it.".to_string(), false),
+        ("        2 2".to_string(), true),
+        ("          2".to_string(), true),
+        ("Then explain.".to_string(), false),
+    ];
+    assert_eq!(code_blocks(&fence_monospace(&lines)), 0);
+
+    // A checkbox glyph, stripped to nothing before it gets here.
+    let lines = [
+        ("Part 1 Compute A union B.".to_string(), false),
+        ("".to_string(), true),
+        ("Part 2 Compute the power set.".to_string(), false),
+    ];
+    assert_eq!(code_blocks(&fence_monospace(&lines)), 0);
+
+    // ...and a real method is still a real method.
+    let lines = [
+        ("Complete it.".to_string(), false),
+        ("int sum(int[] a) {".to_string(), true),
+        ("    return 0;".to_string(), true),
+        ("}".to_string(), true),
+    ];
+    assert_eq!(code_blocks(&fence_monospace(&lines)), 1);
+}
+
 /// A blank line inside a function is not the end of the function. Closing the
 /// fence on one shreds every method with a paragraph break into pieces.
 #[test]

@@ -154,13 +154,37 @@ pub fn code_blocks(text: &str) -> usize {
     blocks(text).iter().filter(|b| b.is_code()).count()
 }
 
+/// Is this run of lines plausibly code, or is it the extractor being fooled?
+///
+/// pdf.js's "monospace" is a guess about the *font*, and in a document with any
+/// mathematics in it the guess is wrong constantly: LaTeX sets superscripts and
+/// symbols in maths faces that classify as monospace, so `n²` arrives as a
+/// lone line reading `2`, and a checkbox glyph arrives as a lone line reading
+/// `□`. On the study's own lab, every single monospaced line pdf.js reported
+/// was one of those — thirteen of them, none code — and each one opened a
+/// fence in the middle of a question.
+///
+/// Two conditions, both cheap and both aimed at that failure. A run needs more
+/// than one line, because a stray glyph is a stray glyph; and it needs a
+/// letter somewhere, because `2 2` is an exponent and code has identifiers.
+///
+/// The cost is a genuine one-line code block read as prose, which the
+/// instructor can fence by hand. That is a much better trade than restructuring
+/// every mathematics question in the document.
+fn is_code_run(lines: &[(String, bool)]) -> bool {
+    let filled: Vec<&str> =
+        lines.iter().map(|(t, _)| t.trim()).filter(|t| !t.is_empty()).collect();
+    filled.len() > 1 && filled.iter().any(|t| t.chars().any(|c| c.is_alphabetic()))
+}
+
 /// Wrap runs of monospaced lines in a fence.
 ///
 /// Used on ingest. A PDF has no idea it contains code, but it does know which
 /// glyphs came from a monospaced font, and in a CS assignment that is very
 /// nearly the same question. The result is a starting point the instructor
 /// edits, not an answer: text extraction loses indentation on some producers
-/// and mistakes a monospaced heading for a code line on others.
+/// and mistakes a maths glyph for a code line on others — see `is_code_run`
+/// for what is done about the second.
 pub fn fence_monospace(lines: &[(String, bool)]) -> String {
     // Where each run starts and ends, so its indentation can be measured
     // before any of it is written.
@@ -183,6 +207,7 @@ pub fn fence_monospace(lines: &[(String, bool)]) -> String {
     if let Some(from) = start {
         runs.push((from, lines.len()));
     }
+    runs.retain(|&(from, to)| is_code_run(&lines[from..to]));
 
     // Strip the run's own left margin.
     //

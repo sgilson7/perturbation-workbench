@@ -203,9 +203,18 @@ Being clear about this matters more than the feature list.
   the same thing — not because that implementation is authoritative. Use it to
   see drift, not as a number about a question.
 - **PDF extraction produces drafts, not questions.** Layout is lost on some
-  producers, superscripts fuse into words on others, and a monospaced heading
-  is indistinguishable from a line of code. Everything that comes out of an
-  ingest is yours to read and fix before you test it.
+  producers and superscripts fuse into words on others. Mathematics is the
+  worst case: pdf.js returns a LaTeX maths run with spacing of its own, so
+  `U = {1, 2, ..., 8}` arrives as `U = { 1 , 2 , . . . , 8 }`. That is the
+  extractor's output and not something a threshold here can tune away, so it
+  is left alone and left to you. Everything that comes out of an ingest is
+  yours to read and fix before you test it — and the query you test is the
+  query you saw, so fixing it is the point rather than a chore.
+- **"This line is monospaced" is a guess about the font, and a poor one in a
+  maths document.** LaTeX sets superscripts and symbols in faces that classify
+  as monospace, so a code block is only recognised from a run of more than one
+  such line with a letter in it. A genuine one-line code block is read as
+  prose; add the fence by hand.
 - **The splitter works out one numbering convention and applies it.** Pointed
   at something that is not an assignment — a paper, say — it will find the
   reference list and tell you it numbered the document that way. It says which

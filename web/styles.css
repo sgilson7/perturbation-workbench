@@ -183,3 +183,12 @@ label.stacked textarea { font-family: var(--mono); font-size: 12px; resize: vert
 .spinner { width: 30px; height: 30px; border: 3px solid var(--line); border-top-color: var(--accent);
   border-radius: 50%; animation: spin .8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* A card that explains why a panel is missing. Bordered like the panel it
+   stands in for, so the eye lands on it in the same place. */
+.card.blocked { border-style: dashed; }
+.card.blocked h2 { color: var(--working); }
+button.stamp.next { cursor: pointer; border-style: solid; border-color: var(--accent);
+  opacity: 1; text-align: left; font: inherit; color: inherit; }
+button.stamp.next:hover { background: #1b2130; }
+button.stamp.next .pct { color: var(--accent); font-weight: 600; }
