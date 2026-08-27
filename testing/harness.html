@@ -1,0 +1,11 @@
+<!DOCTYPE html>
+<!-- A page whose only job is to let `make test-ui` exercise read.js against a
+     real PDF before there is a UI to exercise it through. Not shipped. -->
+<html lang="en"><head><meta charset="utf-8"><title>read.js harness</title></head>
+<body>
+<script type="module">
+import { read } from '../web/read.js';
+window.readPdf = (bytes) => read(new Uint8Array(bytes));
+window.ready = true;
+</script>
+</body></html>
