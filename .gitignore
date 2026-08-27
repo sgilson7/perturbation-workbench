@@ -1,0 +1,15 @@
+/target
+/dist
+/web/pkg
+.DS_Store
+.venv-test
+testing/shots
+testing/out
+
+# Source material used to build the tool, not to publish it: the lab PDFs the
+# fixture run is based on, the accepted AIED paper, and the intervention memo.
+# The repository is public; these are not ours to redistribute from it.
+*.pdf
+*.docx
+*.jsx
+perturbation-workbench-plan.md
