@@ -114,6 +114,18 @@ pub enum Access {
     Unspecified,
 }
 
+impl Access {
+    /// How it reads in a document a person is going to hold.
+    pub fn label(self) -> &'static str {
+        match self {
+            Access::Institutional => "institutional licence",
+            Access::Consumer => "consumer account",
+            Access::Api => "API",
+            Access::Unspecified => "unspecified access",
+        }
+    }
+}
+
 /// The model a run is being tested against.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]

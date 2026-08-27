@@ -198,14 +198,45 @@ def main():
         page.click("#mclose")
         print(f"  ✓ the query file is named by its own digest ({digest}) and the manifest agrees")
 
-        # 10. The run survives a reload.
+        # 10. The assignment: typeset, re-opened, hashed, and the manifest
+        #     records the digest the file actually has.
+        page.click("#exportassignment")
+        expect(page.locator("#mtitle")).to_have_text("Export the assignment")
+        page.select_option("#optmode", "fullHistory")
+        page.fill("#opttitle", "CSC116 Lab 3")
+        page.click("#optgo")
+        page.wait_for_selector("#mtitle:text('Assignment')", timeout=20000)
+        shown = page.locator("#mbody pre").inner_text()
+        pdf = page.evaluate(
+            "async () => { const r = await fetch(document.getElementById('mdownload').href);"
+            " return [...new Uint8Array(await r.arrayBuffer())]; }")
+        pdf = bytes(pdf)
+        got = hashlib.sha256(pdf).hexdigest()
+        if got not in shown:
+            problems.append(f"the assignment digest shown is not the file's ({got[:8]})")
+        if not pdf.startswith(b"%PDF-1.7"):
+            problems.append("the assignment is not a PDF")
+        for key in [b"/Info", b"/Metadata", b"/Producer", b"/Author"]:
+            if key in pdf:
+                problems.append(f"the assignment carried {key.decode()}")
+        if pdf.count(b"%%EOF") != 1:
+            problems.append("the assignment has more than one revision")
+        # Uncompressed streams are what make this checkable at all.
+        if b"CSC116 Lab 3" not in pdf:
+            problems.append("the assignment title is not readable in the raw bytes")
+        if b"Spatial Injection" not in pdf:
+            problems.append("full history did not include the perturbation strategy")
+        page.click("#mclose")
+        print(f"  ✓ the assignment is typeset, re-read, and hashed ({got[:8]}, {len(pdf)} bytes)")
+
+        # 11. The run survives a reload.
         page.reload()
         page.wait_for_selector(".qcard")
         expect(page.locator(".qcard .tag")).to_have_text("RESISTANT")
         expect(page.locator("#model")).to_have_value("gemini-2.5-flash")
         print("  ✓ the run survives a reload")
 
-        # 11. And the other way in: a PDF, split without being told anything
+        # 12. And the other way in: a PDF, split without being told anything
         #     about how this particular assignment numbers its questions.
         # Prefer something that is actually an assignment. Pointed at a paper
         # the splitter finds its reference list and says so in the summary,

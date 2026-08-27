@@ -135,6 +135,7 @@ async function boot() {
   $('mclose').onclick = () => ($('modal').hidden = true);
   $('addq').onclick = addQuestion;
   $('reset').onclick = reset;
+  $('exportassignment').onclick = assignmentOptions;
   $('exportmanifest').onclick = exportManifest;
   $('exportqueries').onclick = exportQueries;
   $('exportsession').onclick = exportSession;
@@ -290,8 +291,9 @@ function render() {
     `${v.resistant}/${v.questions.length} resistant` +
     (v.advisories ? ` · ${v.advisories} reported` : '') +
     (v.blocking ? ` · ${v.blocking} blocking` : '');
-  $('exportmanifest').disabled = !v.canExport;
-  $('exportqueries').disabled = !v.canExport;
+  for (const id of ['exportassignment', 'exportmanifest', 'exportqueries']) {
+    $(id).disabled = !v.canExport;
+  }
 
   // Settings and target are owned by the run, so the fields follow it rather
   // than the other way round.
@@ -724,6 +726,93 @@ function addQuestion() {
 }
 
 // ----------------------------------------------------------------- exports
+
+/// The assignment, and the manifest that accompanies it.
+///
+/// The order is the point. Verification runs first — building the manifest is
+/// what runs it, and a blocking finding refuses the download rather than being
+/// written into it. Then the PDF is typeset, then it is **re-opened with
+/// pdf.js** and hashed, and only then is the manifest rebuilt with that digest
+/// in it. A writer that never re-reads its own output is asking to be trusted;
+/// this one hands you a number you can check with `shasum`.
+async function exportAssignment() {
+  const mode = ui.exportMode || 'final';
+  const ledger = ui.exportLedger !== false;
+  const title = ui.exportTitle || 'Assignment';
+
+  busy('Verifying the run…');
+  try {
+    // Refuses here if anything blocks, before a PDF is written at all.
+    ui.wb.manifest(buildId(), now(), '');
+
+    busy('Typesetting…');
+    const doc = ui.wb.assignment(JSON.stringify({ mode, ledger, title }));
+    const pages = doc.pages;
+    const approximations = doc.approximations;
+    const bytes = doc.take();
+
+    busy('Re-reading the finished document…');
+    const back = await read(bytes);
+    if (back.pages !== pages) {
+      throw new Error(`wrote ${pages} pages but the finished file has ${back.pages}`);
+    }
+
+    const files = JSON.parse(ui.wb.queryFiles(true));
+    const manifest = ui.wb.manifest(buildId(), now(), JSON.stringify({
+      assignmentSha256: back.sha256,
+      includesHistory: mode === 'fullHistory',
+      includesLedger: ledger,
+      queryFiles: files.length,
+    }));
+
+    idle();
+    sheet('Assignment', `
+      <p>${pages} page(s), re-opened and read back before its digest was recorded.</p>
+      <pre>shasum -a 256 assignment.pdf
+${esc(back.sha256)}  assignment.pdf</pre>
+      ${approximations ? `<p class="finding advisory">${approximations} character(s) had no glyph in
+        any standard font and were substituted. The exact query files carry the original text.</p>`
+        : '<p class="sidenote">Every character was typeset exactly.</p>'}
+      <p class="sidenote">The manifest below records that digest, so a collaborator can check the
+        PDF they were sent is the PDF this run produced.</p>
+      <p><a class="btn" href="${save('run-manifest.json', manifest, 'application/json').href}"
+        download="run-manifest.json">Download run-manifest.json</a></p>`,
+      { name: mode === 'fullHistory' ? 'assignment-full-history.pdf' : 'assignment.pdf',
+        href: URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' })) });
+  } catch (e) {
+    idle();
+    showBlocked(String(e));
+  }
+}
+
+/// Ask what kind of document before making one. Two modes for two readers,
+/// and the ledger names the model's specific failures, which is not something
+/// to hand a class by accident.
+function assignmentOptions() {
+  sheet('Export the assignment', `
+    <label class="stacked">Title
+      <input id="opttitle" value="${esc(ui.exportTitle || 'Assignment')}">
+    </label>
+    <label class="stacked">Document
+      <select id="optmode">
+        <option value="final">Final — the question set and its rubrics</option>
+        <option value="fullHistory">Full history — every version, strategy and attempt</option>
+      </select>
+    </label>
+    <label class="check"><input type="checkbox" id="optledger" ${ui.exportLedger === false ? '' : 'checked'}>
+      <span>Include the observed-hallucination ledger (instructor copy)</span></label>
+    <p class="sidenote">The ledger names what the model got wrong, which is a map of where to push
+      it. Leave it out of the copy the class gets.</p>
+    <p><button class="btn primary" id="optgo">Build it</button></p>`);
+  $('optmode').value = ui.exportMode || 'final';
+  $('optgo').onclick = () => {
+    ui.exportTitle = $('opttitle').value.trim() || 'Assignment';
+    ui.exportMode = $('optmode').value;
+    ui.exportLedger = $('optledger').checked;
+    $('modal').hidden = true;
+    exportAssignment();
+  };
+}
 
 function exportManifest() {
   try {

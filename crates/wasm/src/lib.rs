@@ -12,9 +12,11 @@
 //! object in a language that cannot refuse an invalid change. Holding it in
 //! Rust means every transition goes through a method that can say no.
 
+use workbench_core::assignment::{self, Options};
 use workbench_core::hash::{canonical, BuildId, ModelId, Sha256Hex, Timestamp};
 use workbench_core::ingest::{ingest, Line};
 use workbench_core::manifest::{self, Outputs};
+use workbench_core::pdfwrite;
 use workbench_core::protocol::{Question, Settings, Strategy};
 use workbench_core::rubric::{AttemptRef, ChipId, Percent, RubricDoc, Scale, Scores};
 use workbench_core::session::{Access, Session};
@@ -362,11 +364,58 @@ impl Workbench {
         json(&out)
     }
 
+    /// Typeset the assignment.
+    ///
+    /// Returns the bytes and what had to be approximated to produce them. The
+    /// caller re-opens the result with pdf.js before recording its digest,
+    /// which is the same move the redactor makes: a writer that never re-reads
+    /// its own output is asking to be trusted rather than demonstrating it
+    /// deserves to be.
+    pub fn assignment(&self, options_json: &str) -> Result<Assignment, JsValue> {
+        let opts: Options = serde_json::from_str(options_json).map_err(err)?;
+        let out = assignment::render(&self.session, &opts);
+        Ok(Assignment {
+            pages: out.pages.len(),
+            approximations: out.approximations,
+            bytes: pdfwrite::build(&out.pages),
+        })
+    }
+
     /// A model identifier the manifest will accept, checked before the run
     /// starts rather than at export.
     #[wasm_bindgen(js_name = isModelId)]
     pub fn is_model_id(s: &str) -> bool {
         ModelId::parse(s).is_ok()
+    }
+}
+
+/// A typeset assignment, on its way out of the module.
+#[wasm_bindgen]
+pub struct Assignment {
+    bytes: Vec<u8>,
+    pages: usize,
+    approximations: usize,
+}
+
+#[wasm_bindgen]
+impl Assignment {
+    /// Takes the bytes rather than borrowing them, so the document is released
+    /// as soon as the caller holds it.
+    pub fn take(&mut self) -> Vec<u8> {
+        std::mem::take(&mut self.bytes)
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn pages(&self) -> usize {
+        self.pages
+    }
+
+    /// Characters no base-14 font could draw exactly. Shown to the user rather
+    /// than hidden: the `.txt` query files carry the original UTF-8, and a
+    /// reader should know when the PDF is the approximation.
+    #[wasm_bindgen(getter)]
+    pub fn approximations(&self) -> usize {
+        self.approximations
     }
 }
 
