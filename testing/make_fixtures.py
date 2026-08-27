@@ -21,6 +21,7 @@ monospaced-run detection gets outside somebody's laptop.
     python3 testing/make_fixtures.py synthesise fixtures/sample-assignment.pdf
 """
 import json
+import os
 import subprocess
 import sys
 
@@ -115,6 +116,10 @@ def synthesise(path):
         out += b"%010d 00000 n \n" % off
     out += b"trailer\n<</Size %d/Root 1 0 R>>\nstartxref\n%d\n%%%%EOF\n" % (len(objs) + 1, xref)
 
+    # Everything in fixtures/ is gitignored, so a fresh clone does not have the
+    # directory at all — git cannot track an empty one. Working on a machine
+    # where it happened to exist is what hid this until CI ran.
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
     with open(path, "wb") as f:
         f.write(bytes(out))
     print(f"{path}: {n} pages, {len(out)} bytes")
