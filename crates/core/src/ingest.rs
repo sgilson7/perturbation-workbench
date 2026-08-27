@@ -217,6 +217,12 @@ fn detect(lines: &[Line]) -> Option<(HeadingStyle, Vec<(usize, usize, String)>)>
 /// restricting the search there is what keeps a legitimately repeated
 /// instruction — "Show your work." under every part — out of the furniture
 /// pile.
+///
+/// Two pages is enough to establish a repeat, and it has to be: plenty of
+/// assignments are two pages long, and a rule that needed three left the footer
+/// on every one of them. The other half of the test — that it appears on at
+/// least half the pages — is what stops a line that happens to fall at an edge
+/// twice in a long document from being swept away with the furniture.
 fn furniture(lines: &[Line], headings: &[usize]) -> Vec<bool> {
     use std::collections::{BTreeMap, BTreeSet};
 
@@ -243,7 +249,7 @@ fn furniture(lines: &[Line], headings: &[usize]) -> Vec<bool> {
 
     let repeated: BTreeSet<&String> = at_edge
         .iter()
-        .filter(|(_, seen)| seen.len() >= 3 && seen.len() * 2 >= pages)
+        .filter(|(_, seen)| seen.len() >= 2 && seen.len() * 2 >= pages)
         .map(|(s, _)| s)
         .collect();
 

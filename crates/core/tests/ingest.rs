@@ -81,6 +81,38 @@ fn running_page_furniture_is_dropped() {
     assert!(out.furniture_dropped >= 10, "{} lines dropped", out.furniture_dropped);
 }
 
+/// Plenty of assignments are two pages long, and a rule that needed three
+/// pages to establish a repeat left the footer on every one of them.
+#[test]
+fn a_footer_on_a_two_page_assignment_is_still_a_footer() {
+    let mut v = page(1, &[
+        "CSC 999: Programming Fundamentals",
+        "Question 1. Compute the sum.",
+        "Part 1 Show your working.",
+        "\u{00A9} CSC 999 Faculty",
+        "Question 1:-1",
+    ]);
+    v.extend(page(2, &[
+        "CSC 999: Programming Fundamentals",
+        "Question 2. Prove it.",
+        "Part 1 State the definition.",
+        "\u{00A9} CSC 999 Faculty",
+        "Question 2:-1",
+    ]));
+    let out = ingest(&v);
+    assert_eq!(out.drafts.len(), 2);
+    for d in &out.drafts {
+        assert!(!d.text.contains("CSC 999 Faculty"), "Q{} kept the footer:\n{}", d.ordinal, d.text);
+        assert!(!d.text.contains("Programming Fundamentals"), "Q{} kept the header", d.ordinal);
+        assert!(d.text.contains("Part 1"));
+    }
+
+    // A single page has nothing to repeat against, and nothing is swept.
+    let one = ingest(&page(1, &["Question 1. Compute.", "Part 1 Show it.", "Footer line"]));
+    assert_eq!(one.furniture_dropped, 0);
+    assert!(one.drafts[0].text.contains("Footer line"));
+}
+
 /// `Question 4:-1` is a page footer. Reading it as question 4 would split the
 /// lab into a dozen fragments; dropping question 5's heading as furniture
 /// because it looks like question 4's would lose a question entirely.

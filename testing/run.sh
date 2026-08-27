@@ -13,9 +13,14 @@ PY="$ROOT/.venv-test/bin/python"
 
 [ -x "$PY" ] || { echo "run: make test-ui-setup"; exit 1; }
 
+# CI has no real assignment — the lab PDFs are not ours to publish — so one is
+# written from scratch. It carries a Courier block, a running footer and three
+# questions, which is what the extraction actually has to cope with.
+python3 "$ROOT/testing/make_fixtures.py" synthesise "$ROOT/fixtures/sample-assignment.pdf"
+
 fail=0
 ran=0
-for pdf in "$ROOT"/*.pdf "$ROOT"/fixtures/*.pdf; do
+for pdf in "$ROOT"/fixtures/*.pdf "$ROOT"/*.pdf; do
   [ -e "$pdf" ] || continue
   ran=1
   echo
@@ -23,10 +28,7 @@ for pdf in "$ROOT"/*.pdf "$ROOT"/fixtures/*.pdf; do
   "$PY" "$ROOT/testing/drive.py" "$pdf" 2>&1 | grep -vE '^127\.0\.0\.1' || fail=1
 done
 
-if [ "$ran" = 0 ]; then
-  echo "no PDFs to read. Put an assignment PDF in the repository root or in fixtures/."
-  exit 1
-fi
+[ "$ran" = 1 ] || { echo "no PDFs to read, not even the generated one"; exit 1; }
 
 echo
 echo "── a whole run through the real UI ──"

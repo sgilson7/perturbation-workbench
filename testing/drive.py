@@ -70,7 +70,9 @@ def main(pdf_path):
 
     out = ROOT / "testing" / "out"
     out.mkdir(exist_ok=True)
-    (out / "browser.lines.json").write_text(json.dumps(got["lines"], indent=1))
+    # Named after the source so the core can assert against a particular
+    # document rather than against whichever one happened to be read last.
+    (out / f"{pdf.stem}.lines.json").write_text(json.dumps(got["lines"], indent=1))
 
     # The digest is the run's `input` field, and the README's recipe is
     # `shasum -a 256`. Checking it against hashlib here is checking the recipe.

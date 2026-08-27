@@ -162,25 +162,67 @@ pub fn code_blocks(text: &str) -> usize {
 /// edits, not an answer: text extraction loses indentation on some producers
 /// and mistakes a monospaced heading for a code line on others.
 pub fn fence_monospace(lines: &[(String, bool)]) -> String {
-    let mut out = String::new();
-    let mut in_code = false;
-    for (text, mono) in lines {
+    // Where each run starts and ends, so its indentation can be measured
+    // before any of it is written.
+    let mut runs: Vec<(usize, usize)> = Vec::new();
+    let mut start: Option<usize> = None;
+    for (i, (text, mono)) in lines.iter().enumerate() {
         // A blank line inside a run does not end it; a blank line is not
         // monospaced in any producer, and closing on one shreds every
         // function with a paragraph break in it into separate blocks.
         let blank = text.trim().is_empty();
-        if *mono && !in_code {
-            out.push_str("```\n");
-            in_code = true;
-        } else if !*mono && !blank && in_code {
-            out.push_str("```\n");
-            in_code = false;
+        match (*mono, start) {
+            (true, None) => start = Some(i),
+            (false, Some(from)) if !blank => {
+                runs.push((from, i));
+                start = None;
+            }
+            _ => {}
         }
-        out.push_str(text);
-        out.push('\n');
     }
-    if in_code {
+    if let Some(from) = start {
+        runs.push((from, lines.len()));
+    }
+
+    // Strip the run's own left margin.
+    //
+    // Indentation arrives measured against the page, not against the block, so
+    // a method set 10pt right of the prose margin comes back with two spaces in
+    // front of every line including the first. That is faithful to the page and
+    // wrong as code: the block's own left edge is its zero, which is what every
+    // editor and every reader assumes. Relative depth — the part that carries
+    // the meaning — is untouched.
+    let dedent = |from: usize, to: usize| -> usize {
+        lines[from..to]
+            .iter()
+            .filter(|(t, _)| !t.trim().is_empty())
+            .map(|(t, _)| t.len() - t.trim_start_matches(' ').len())
+            .min()
+            .unwrap_or(0)
+    };
+
+    let mut out = String::new();
+    let mut i = 0;
+    for (from, to) in runs {
+        while i < from {
+            out.push_str(&lines[i].0);
+            out.push('\n');
+            i += 1;
+        }
+        let cut = dedent(from, to);
         out.push_str("```\n");
+        while i < to {
+            let text = &lines[i].0;
+            out.push_str(if text.len() >= cut { &text[cut..] } else { text });
+            out.push('\n');
+            i += 1;
+        }
+        out.push_str("```\n");
+    }
+    while i < lines.len() {
+        out.push_str(&lines[i].0);
+        out.push('\n');
+        i += 1;
     }
     out
 }

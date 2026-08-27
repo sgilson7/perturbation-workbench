@@ -83,14 +83,20 @@ async function readPage(page, pageNumber) {
   for (const it of items) {
     if (cur && Math.abs(it.y - cur.y) <= cur.h * SAME_LINE) {
       // pdf.js splits a line at arbitrary points, and whether a gap is a space
-      // is a question about geometry, not about the strings.
+      // is a question about geometry, not about the strings. It is only a
+      // question at all when neither side already has one: pdf.js hands back
+      // the space as leading whitespace on the next item about as often as it
+      // drops it, and adding a second turns "public static" into
+      // "public  static" throughout every code block.
+      const spaced = cur.text.endsWith(' ') || it.text.startsWith(' ');
       const gap = it.x - cur.right;
-      cur.text += gap > it.h * 0.2 && !cur.text.endsWith(' ') ? ' ' + it.text : it.text;
+      cur.text += gap > it.h * 0.2 && !spaced ? ' ' + it.text : it.text;
       cur.right = it.x + (it.width || 0);
       cur.mono = cur.mono && it.mono;
     } else {
       if (cur) lines.push(cur);
-      cur = { text: it.text, page: pageNumber, mono: it.mono, y: it.y, h: it.h, right: it.x };
+      cur = { text: it.text, page: pageNumber, mono: it.mono, y: it.y, h: it.h, x: it.x,
+              right: it.x + (it.width || 0) };
     }
     if (it.eol) {
       lines.push(cur);
@@ -98,6 +104,22 @@ async function readPage(page, pageNumber) {
     }
   }
   if (cur) lines.push(cur);
+
+  // Restore the indentation of code, geometrically.
+  //
+  // Leading whitespace does not survive extraction — pdf.js expresses it as a
+  // starting x rather than as characters, and on some producers drops it
+  // outright. For prose that costs nothing. For a code block it is the
+  // meaning: a method body flush against the margin is not the question that
+  // was asked. So the indent is measured against the leftmost text on the page
+  // and converted back into spaces at Courier's fixed pitch, which is exact
+  // for the fixed-pitch fonts this applies to.
+  const left = Math.min(...lines.map((l) => l.x), Infinity);
+  for (const l of lines) {
+    if (!l.mono || !Number.isFinite(left)) continue;
+    const indent = Math.round((l.x - left) / (l.h * 0.6));
+    if (indent > 0) l.text = ' '.repeat(indent) + l.text;
+  }
 
   return lines
     .map((l) => ({ text: l.text.trimEnd(), page: l.page, mono: l.mono }))

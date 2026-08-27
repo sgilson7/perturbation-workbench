@@ -123,6 +123,27 @@ fn monospaced_runs_become_fenced_code() {
     assert!(body.contains("public int sum"), "{:?}", body);
 }
 
+/// Indentation arrives measured against the page, not against the block, so a
+/// method set right of the prose margin comes back with the same two spaces in
+/// front of every line. The block's own left edge is its zero.
+#[test]
+fn a_code_run_is_dedented_to_its_own_left_edge() {
+    let lines = [
+        ("Complete the method:".to_string(), false),
+        ("  public static int sum(int[] xs) {".to_string(), true),
+        ("      int total = 0;".to_string(), true),
+        ("          total += x;".to_string(), true),
+        ("  }".to_string(), true),
+        ("State its running time.".to_string(), false),
+    ];
+    let out = fence_monospace(&lines);
+    let bs = blocks(&out);
+    let (_, body) = code_of(&bs, 1);
+    assert_eq!(body, "public static int sum(int[] xs) {\n    int total = 0;\n        total += x;\n}\n");
+    // The prose around it keeps whatever it had.
+    assert!(out.starts_with("Complete the method:"));
+}
+
 /// A blank line inside a function is not the end of the function. Closing the
 /// fence on one shreds every method with a paragraph break into pieces.
 #[test]

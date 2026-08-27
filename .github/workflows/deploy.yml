@@ -1,0 +1,83 @@
+name: Build and deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Least privilege: the job needs to read the repo and mint a Pages deployment.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Never let two deploys race; a superseded run is cancelled rather than queued.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - uses: Swatinem/rust-cache@v2
+
+      # wasm-bindgen-cli must match the wasm-bindgen crate exactly or the
+      # generated glue will not match the module. Read the version out of the
+      # lockfile so a `cargo update` can never silently desync the two.
+      - name: Resolve pinned wasm-bindgen version
+        id: wb
+        run: |
+          V=$(awk '/^name = "wasm-bindgen"$/{f=1} f&&/^version = /{gsub(/"/,"");print $3;exit}' Cargo.lock)
+          echo "Using wasm-bindgen $V"
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-bindgen-cli@${{ steps.wb.outputs.version }}
+
+      # The protocol engine is browser-free, so it is fully tested here. A
+      # failure stops the deploy rather than publishing a broken guarantee.
+      - name: Test the protocol engine
+        run: cargo test --workspace --locked
+
+      # `--with-deps` rather than the plain install the Makefile does: a laptop
+      # already has the shared libraries Chromium wants and a fresh runner does
+      # not.
+      - name: Install a browser for the UI tests
+        run: |
+          python3 -m venv .venv-test
+          ./.venv-test/bin/pip -q install playwright
+          ./.venv-test/bin/playwright install --with-deps chromium
+
+      # The half `cargo test` cannot reach: pdf.js extraction, the page that
+      # drives the engine, and a whole perturbation run ending in an exported
+      # assignment. The assignment PDF it reads is generated here — the lab
+      # PDFs are not ours to publish — and it fails on any console error or any
+      # request that leaves the origin, so "nothing is uploaded" is tested
+      # rather than asserted.
+      - name: Drive the real UI in a browser
+        run: make test-ui
+
+      - name: Build the site
+        run: ./packaging/package-web.sh
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist/web
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
