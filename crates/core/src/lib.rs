@@ -7,3 +7,4 @@ pub mod readability;
 pub mod rubric;
 pub mod session;
 pub mod verify;
+pub mod view;

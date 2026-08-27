@@ -114,6 +114,23 @@ fn the_guard_notices_drift_a_cap_and_growth_separately() {
 /// Every field of the report is advisory. Nothing in the guard can refuse a
 /// save, because the instructor is the one who knows whether a longer question
 /// is a worse question.
+/// The page reads this report as JSON, and a method serialises to nothing —
+/// which reads as `false` in JavaScript and silently hides the advisory.
+#[test]
+fn the_guard_report_carries_its_verdict_into_json() {
+    let base = analyze("Add two numbers.");
+    let long = analyze(&format!("Add two numbers. {}", "Explain every step fully. ".repeat(30)));
+    let r = guard(&base, &long, &Limits::default());
+    assert!(r.tripped());
+
+    let json = serde_json::to_string(&r).unwrap();
+    assert!(json.contains("\"tripped\":true"), "{}", json);
+    assert!(json.contains("\"overgrown\":true"), "{}", json);
+    assert!(serde_json::to_string(&guard(&base, &base, &Limits::default()))
+        .unwrap()
+        .contains("\"tripped\":false"));
+}
+
 #[test]
 fn the_guard_reports_the_numbers_it_judged_on() {
     let base = analyze("Add two numbers.");

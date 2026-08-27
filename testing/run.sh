@@ -29,6 +29,11 @@ if [ "$ran" = 0 ]; then
 fi
 
 echo
+echo "── a whole run through the real UI ──"
+"$ROOT/packaging/package-web.sh" >/dev/null
+"$PY" "$ROOT/testing/run_ui.py" 2>&1 | grep -vE '^127\.0\.0\.1' || fail=1
+
+echo
 echo "── the core splits what the browser read ──"
 cargo test -p workbench-core --test browser -- --nocapture 2>&1 | grep -E "^test |skipped" || fail=1
 

@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Perturbation Workbench</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header>
+  <h1>Perturbation&nbsp;Workbench</h1>
+  <p class="privacy">Runs entirely in your browser. Nothing is uploaded, and no model is called.</p>
+  <span class="runbar" id="runbar" hidden>
+    <span id="runcount" class="count"></span>
+    <button id="exportmanifest" class="btn tiny" title="The run manifest: hashes, counts and settings, no question text">Manifest</button>
+    <button id="exportqueries" class="btn tiny" title="The exact query files, named by digest">Queries</button>
+    <button id="exportsession" class="btn tiny" title="The whole run, including question text — not for sharing">Session</button>
+    <button id="reset" class="btn tiny danger" title="Discard this run">Reset</button>
+  </span>
+  <span class="build" id="build" title="Build version. Quote this when reporting a bug.">__BUILD__</span>
+</header>
+
+<!-- Two equal ways in. Typing a question is not a fallback for not having a
+     PDF: most runs start from a question somebody is about to set. -->
+<section id="start" class="start">
+  <div class="ways">
+    <form class="way" id="wayblank">
+      <h2>Write a question</h2>
+      <p>Paste or type the question you want to make resistant. Code goes in a fenced block.</p>
+      <textarea id="firstq" rows="8" spellcheck="false"
+        placeholder="Complete the method below so that it returns the sum of the array.&#10;&#10;```java&#10;public static int sum(int[] xs) {&#10;    // your code here&#10;}&#10;```&#10;&#10;State its running time in big-O and justify it."></textarea>
+      <button class="btn primary" id="addfirst" type="submit">Start the run</button>
+    </form>
+    <div class="way" id="waypdf">
+      <h2>Open an assignment</h2>
+      <p>Drop a PDF and the questions are split out for you. Any CS assignment — the
+         numbering convention is worked out from the document.</p>
+      <div class="dropbox" id="drop">
+        <strong>Drop a PDF here</strong>
+        <span>or</span>
+        <label class="btn">Choose file<input type="file" id="file" accept="application/pdf" hidden></label>
+      </div>
+      <p class="hint">Your file never leaves this machine — there is no server to send it to.</p>
+    </div>
+  </div>
+</section>
+
+<main id="app" hidden>
+  <div class="toolbar">
+    <label class="field">
+      <span>Target model <em>(required before the first attempt)</em></span>
+      <input type="text" id="model" placeholder="gemini-2.5-flash" autocomplete="off" spellcheck="false">
+    </label>
+    <label class="field small">
+      <span>Access</span>
+      <select id="access">
+        <option value="institutional">Institutional licence</option>
+        <option value="consumer">Consumer account</option>
+        <option value="api">API</option>
+        <option value="unspecified">Unspecified</option>
+      </select>
+    </label>
+    <label class="check" title="Step 7: each attempt goes to a distinct instance, so context cannot carry over.">
+      <input type="checkbox" id="fresh" checked><span>Fresh instance per attempt</span>
+    </label>
+    <div class="spacer"></div>
+    <label class="field small">
+      <span>Threshold</span>
+      <input type="number" id="threshold" min="0" max="100" step="1">
+    </label>
+    <label class="field small">
+      <span>FK drift</span>
+      <input type="number" id="fkdrift" min="0" max="20" step="0.5">
+    </label>
+    <label class="field small">
+      <span>FK cap</span>
+      <input type="number" id="fkcap" min="0" max="30" step="0.5">
+    </label>
+    <label class="field small">
+      <span>Growth %</span>
+      <input type="number" id="growthcap" min="0" max="500" step="5">
+    </label>
+  </div>
+
+  <div class="body">
+    <nav class="rail">
+      <div class="railhead">
+        <h2>Queue</h2>
+        <button id="addq" class="btn tiny" title="Add a question">+</button>
+      </div>
+      <div id="queue"></div>
+      <label class="btn tiny railpdf">Open a PDF<input type="file" id="file2" accept="application/pdf" hidden></label>
+    </nav>
+
+    <div class="stage" id="stage"></div>
+
+    <aside class="side" id="side"></aside>
+  </div>
+</main>
+
+<div id="modal" class="modal" hidden>
+  <div class="sheet">
+    <h2 id="mtitle"></h2>
+    <div id="mbody"></div>
+    <div class="mactions">
+      <button id="mclose" class="btn">Back</button>
+      <a id="mdownload" class="btn primary" download hidden>Download</a>
+    </div>
+  </div>
+</div>
+
+<div id="busy" class="busy" hidden><div class="spinner"></div><span id="busytext">Working…</span></div>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>

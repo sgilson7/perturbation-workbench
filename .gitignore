@@ -15,3 +15,4 @@ testing/shots
 /fixtures/lab3*
 perturbation-workbench-plan.md
 /testing/out
+__pycache__/

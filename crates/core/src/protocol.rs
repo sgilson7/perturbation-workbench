@@ -94,6 +94,31 @@ impl Status {
         matches!(self, Status::Untested | Status::Testing { .. })
     }
 
+    /// The word the status rail shows.
+    pub fn label(self) -> &'static str {
+        match self {
+            Status::Untested => "UNTESTED",
+            Status::NotResistant { .. } => "NOT RESISTANT",
+            Status::Testing { .. } => "TESTING",
+            Status::Resistant => "RESISTANT",
+            Status::Inconsistent { .. } => "FALSE NEGATIVE",
+        }
+    }
+
+    /// How the status should read at a glance.
+    ///
+    /// In the core rather than in CSS because a status and its colour have to
+    /// agree, and two places that each decide independently eventually will
+    /// not. The stylesheet maps the name to a hue and nothing else.
+    pub fn tone(self) -> Tone {
+        match self {
+            Status::Untested => Tone::Neutral,
+            Status::NotResistant { .. } | Status::Inconsistent { .. } => Tone::Bad,
+            Status::Testing { .. } => Tone::Working,
+            Status::Resistant => Tone::Good,
+        }
+    }
+
     /// The Table 1 step this state is waiting on, for the UI banner.
     pub fn banner(self) -> &'static str {
         match self {
@@ -109,6 +134,16 @@ impl Status {
                                             the threshold. Not resistant; perturb again.",
         }
     }
+}
+
+/// How a status reads at a glance.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Tone {
+    Neutral,
+    Working,
+    Good,
+    Bad,
 }
 
 /// The transition table, over percentages alone.
@@ -351,6 +386,16 @@ impl Question {
     }
 
     // ------------------------------------------------------------ editing
+
+    /// Rename a question.
+    ///
+    /// Always allowed, and it changes nothing that has been recorded: a title
+    /// is how the instructor finds the question in the rail, and it never
+    /// reaches the manifest. An ingested title is a guess made from a heading
+    /// line, so being able to fix it matters more than freezing it.
+    pub fn retitle(&mut self, title: &str) {
+        self.title = title.trim().to_string();
+    }
 
     /// Rewrite a version that has not been prompted yet.
     pub fn edit(&mut self, at: usize, text: &str) -> Result<(), ProtocolError> {

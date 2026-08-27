@@ -213,11 +213,19 @@ pub struct GuardReport {
     pub over_cap: bool,
     /// Grew more than `growth_cap` percent in words.
     pub overgrown: bool,
+    /// Any of the three.
+    ///
+    /// A field rather than only a method because this report is serialised for
+    /// the page, and a method serialises to nothing at all — the front end
+    /// reads `undefined`, treats it as false, and silently stops showing the
+    /// advisory. Nothing stores a `GuardReport`, so there is no persisted copy
+    /// of this to fall out of step with the three flags above.
+    pub tripped: bool,
 }
 
 impl GuardReport {
     pub fn tripped(&self) -> bool {
-        self.drifted || self.over_cap || self.overgrown
+        self.tripped
     }
 }
 
@@ -226,12 +234,16 @@ pub fn guard(base: &Metrics, candidate: &Metrics, limits: &Limits) -> GuardRepor
     let growth = js_round(
         (candidate.words as f64 - base.words as f64) / (base.words.max(1) as f64) * 100.0,
     );
+    let drifted = candidate.grade > base.grade + limits.fk_drift;
+    let over_cap = candidate.grade > limits.fk_cap;
+    let overgrown = growth > limits.growth_cap;
     GuardReport {
         grade: candidate.grade,
         base_grade: base.grade,
         growth,
-        drifted: candidate.grade > base.grade + limits.fk_drift,
-        over_cap: candidate.grade > limits.fk_cap,
-        overgrown: growth > limits.growth_cap,
+        drifted,
+        over_cap,
+        overgrown,
+        tripped: drifted || over_cap || overgrown,
     }
 }
