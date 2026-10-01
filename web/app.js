@@ -103,7 +103,7 @@ function attempt(fn) {
     render();
     return true;
   } catch (e) {
-    sheet('That is not allowed', `<p class="finding">${esc(String(e))}</p>`);
+    sheet('The operation could not be completed', `<p class="finding">${esc(String(e))}</p>`);
     return false;
   }
 }
@@ -195,8 +195,7 @@ async function openPdf(file) {
         ${summary.checkboxesStripped} checkbox glyph(s) stripped,
         ${summary.codeLines} monospaced line(s) kept as code.
       </p>
-      <p class="sidenote">Everything here is a draft — text extraction is imperfect and the
-      questions are yours to edit before you test them.</p>`);
+      <p class="sidenote">These are draft questions. Check the extracted text and question boundaries before testing.</p>`);
   } catch (e) {
     sheet('Could not open that PDF', `<p class="finding">${esc(String(e))}</p>`);
   } finally {
@@ -372,9 +371,7 @@ function renderStage() {
           ${ver.codeBlocks ? `<span>code blocks <b>${ver.codeBlocks}</b></span>` : ''}
         </div>
       </div>
-      ${g.tripped ? `<p class="sidenote warn">Complexity guard tripped — allowed, and recorded
-        in the manifest as an advisory. A question that got harder to read may still be the
-        right question; that is your call, not the tool's.</p>` : ''}
+      ${g.tripped ? `<p class="sidenote warn">The wording exceeds a reading grade or length limit. The change is allowed and recorded as an advisory. Check whether the revised question still serves the learning goal.</p>` : ''}
     </div>
 
     <div class="card">
@@ -503,9 +500,7 @@ function gradingPanel(q, ver) {
       <span class="total">rubric revision <b>${q.rubric.revisions}</b> ·
         <b>${q.rubric.totalPoints}</b> points · threshold <b>${ui.view.settings.threshold}%</b></span>
     </div>
-    ${needTarget ? `<p class="finding">Name the target model above first. "Resistant" is a claim
-      about a specific model on a specific day, and a run that never wrote it down cannot
-      support one.</p>` : ''}
+    ${needTarget ? `<p class="finding">Enter the target model before grading. The result applies to that model, question, rubric, and set of attempts.</p>` : ''}
     <div class="chips">
       ${q.rubric.chips.map((c) => `
         <div class="chiprow">
@@ -523,16 +518,15 @@ function gradingPanel(q, ver) {
     <div class="grid2">
       <label class="stacked">Paste the model's response
         <textarea id="response" rows="5" spellcheck="false"
-          placeholder="Pasted here only to be hashed. The text is discarded; only the digest is kept."></textarea>
+          placeholder="Paste the response so the workbench can record its hash. The attempt record retains the hash rather than the response text."></textarea>
       </label>
       <label class="stacked">Hallucination ledger (optional)
         <textarea id="notetext" rows="5"
-          placeholder="What did it get wrong, specifically? This is what Step 6 turns into a penalty chip.">${esc(ui.note)}</textarea>
+          placeholder="Describe the specific error. You can use the note to create a penalty criterion in the rubric.">${esc(ui.note)}</textarea>
       </label>
     </div>
     <div class="cardhead">
-      <span class="sidenote">Every chip must be marked. The response digest is what proves an
-        attempt happened.</span>
+      <span class="sidenote">Mark every rubric criterion. The response hash identifies the pasted text; it does not independently verify a chatbot attempt.</span>
       <button class="btn primary" id="stamp" ${needTarget ? 'disabled' : ''}>Stamp attempt ${ver.attempts.length + 1}</button>
     </div>
   </div>`;
@@ -552,8 +546,7 @@ function benchPanel(q) {
           title="${esc(s.description)}">${esc(s.name)}</button>`).join('')}
     </div>
     <textarea class="draft" id="draft" spellcheck="false"
-      placeholder="Write the perturbed question here. Start from the exact query above and change
-as little as possible — the point is to break one thing, not to rewrite.">${esc(ui.draft)}</textarea>
+      placeholder="Write the revised question here. Start from the current version, target a specific issue, and check that the learning goal is preserved.">${esc(ui.draft)}</textarea>
     <div class="cardhead">
       <span class="meters" id="draftmeters"></span>
       <button class="btn primary" id="saveversion">Save as v${q.versions.length}</button>
@@ -572,11 +565,8 @@ function renderSide() {
         <span class="total"><b>${r.totalPoints}</b> pts · r${r.revisions}</span>
       </div>
       ${r.frozen
-        ? `<p class="sidenote">Frozen — the first attempt was graded against it. Penalty chips
-           can still be added from the ledger below; nothing else can change, or the attempts
-           already recorded would be graded by a rubric that did not exist when they ran.</p>`
-        : `<p class="sidenote">Editable until the first attempt is stamped. One chip is one
-           atomistic thing the answer either shows or does not.</p>`}
+        ? `<p class="sidenote">The rubric is frozen after the first graded attempt. You can add penalty criteria from the error notes; other edits are disabled to preserve the recorded grading basis.</p>`
+        : `<p class="sidenote">Edit the rubric before recording the first attempt. Each chip is one criterion to grade.</p>`}
 
       <label class="stacked">Mastery scale
         <select id="scale" ${r.frozen ? 'disabled' : ''}>
@@ -616,8 +606,7 @@ function renderSide() {
         <h2>Ledger</h2>
         ${q.unpromotedNotes ? `<span class="tag tone-working">${q.unpromotedNotes} unpromoted</span>` : ''}
       </div>
-      <p class="sidenote">Step 6. An observation becomes a penalty chip, or it is just a note.
-        Notes stay in the session and the assignment appendix; they never reach the manifest.</p>
+      <p class="sidenote">Record the errors you observed. You can turn a note into a penalty criterion. Notes remain in the session and assignment appendix and are omitted from the run manifest.</p>
       <div class="ledger">
         ${ledgerRows(q)}
       </div>
@@ -668,16 +657,14 @@ function wireGrading() {
       const missing = q.rubric.chips.filter((c) => !(c.id in ui.marks));
       if (missing.length) {
         sheet('Every chip must be marked', `
-          <p>A forgotten chip and a chip marked absent are different claims, and only one of
-          them is evidence.</p>
+          <p>Grade every rubric criterion, including criteria for which the response earns no credit.</p>
           <p class="finding">Unmarked: ${missing.map((c) => esc(c.label)).join(', ')}</p>`);
         return;
       }
       const response = $('response').value;
       if (!response.trim()) {
         sheet('Paste the response first', `
-          <p>The response digest is what proves an attempt happened. The text is hashed here and
-          discarded — it never enters the run.</p>`);
+          <p>Paste the response to record its hash. The hash identifies that text; it does not independently verify where the response came from.</p>`);
         return;
       }
       const digest = await sha256Text(response);
@@ -861,9 +848,8 @@ function assignmentOptions() {
     </label>
     <label class="check"><input type="checkbox" id="optledger" ${ui.exportLedger === false ? '' : 'checked'}>
       <span>Include the observed-hallucination ledger (instructor copy)</span></label>
-    <p class="sidenote">The ledger names what the model got wrong, which is a map of where to push
-      it. Leave it out of the copy the class gets.</p>
-    <p><button class="btn primary" id="optgo">Build it</button></p>`);
+    <p class="sidenote">The ledger includes observed chatbot errors. Omit it when preparing the student copy if those notes would reveal the intended checks.</p>
+    <p><button class="btn primary" id="optgo">Export PDF</button></p>`);
   $('optmode').value = ui.exportMode || 'final';
   $('optgo').onclick = () => {
     ui.exportTitle = $('opttitle').value.trim() || 'Assignment';
@@ -878,8 +864,7 @@ function exportManifest() {
   try {
     const json = ui.wb.manifest(buildId(), now(), '');
     sheet('Run manifest', `
-      <p>Hashes, counts and settings. No question text, no responses, no ledger notes —
-      that is a property of the schema, not a filter.</p>
+      <p>The run manifest contains hashes, counts, and settings. It omits question text, responses, and ledger notes.</p>
       <pre>${esc(json.slice(0, 1400))}${json.length > 1400 ? '\n…' : ''}</pre>`,
       save('run-manifest.json', json, 'application/json'));
   } catch (e) {
@@ -908,24 +893,21 @@ function exportSession() {
   sheet('Session', `
     <p>The whole run, including question text and ledger notes, so it can be paused and moved
     between machines.</p>
-    <p class="finding">This is <b>not</b> the manifest. It contains your assignment. The manifest
-    is the file meant for sharing.</p>`,
+    <p class="finding">This session file contains question text and notes. Review it before sharing. Use the run manifest when you want to share the workflow record without that working text.</p>`,
     save('perturbation-session.json', json, 'application/json'));
 }
 
 function showBlocked(message) {
   const findings = ui.view.blockingFindings || [];
   sheet('Export refused', `
-    <p>Verification runs before any export, and something in this run contradicts itself.
-    A manifest whose own audit says the evidence is broken is not evidence.</p>
+    <p>The export could not be completed. Review the reported findings, correct the blocking issue, and try again.</p>
     ${findings.map((f) => `<p class="finding">${esc(JSON.stringify(f))}</p>`).join('')}
     ${findings.length ? '' : `<p class="finding">${esc(message)}</p>`}`);
 }
 
 function reset() {
   sheet('Discard this run?', `
-    <p>Everything goes: questions, versions, attempts, rubrics and ledger. Export the session
-    first if you might want it back.</p>
+    <p>Reset removes the questions, versions, attempts, rubrics, and notes from this browser’s stored run. Export the session first if you want to keep it.</p>
     <p><button class="btn danger" id="reallyreset">Yes, discard it</button></p>`);
   $('reallyreset').onclick = () => {
     localStorage.removeItem(KEY);

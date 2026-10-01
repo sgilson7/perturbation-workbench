@@ -163,6 +163,13 @@ label.stacked textarea { font-family: var(--mono); font-size: 12px; resize: vert
   border-radius: 6px; padding: 5px 8px; font-size: 12px; font-family: inherit; min-width: 0; }
 .ledger { display: grid; gap: 8px; }
 .note { border-left: 2px solid var(--line); padding: 2px 0 2px 9px; font-size: 12px; }
+/* The four copy notes: what the browser keeps, what the manifest covers, what to
+   record before grading, and what the wording checks mean. Each sits with the
+   control it describes and stays visible while that panel is open. */
+.toolbar .note { flex-basis: 100%; color: var(--dim); border-left-color: var(--line); }
+.field .note { font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--dim);
+  max-width: 34ch; margin-top: 4px; }
+p.note.storage, p.note.manifestnote { margin: 10px 20px; color: var(--dim); max-width: 78ch; }
 .note .src { font-family: var(--mono); font-size: 10px; color: var(--dim); display: block; }
 .note.unpromoted { border-left-color: var(--working); }
 
