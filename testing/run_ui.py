@@ -71,6 +71,18 @@ def stamp(page, credit, response):
     page.wait_for_timeout(120)
 
 
+def downloaded(page, selector):
+    """Click a download link and return the bytes the browser saved.
+
+    Through a real download rather than `fetch(href)`: the page's CSP limits
+    connect-src to 'self', which rightly refuses a fetch of the page's own
+    blob: URL, and a click is what the reader does anyway.
+    """
+    with page.expect_download() as d:
+        page.click(selector)
+    return pathlib.Path(d.value.path()).read_bytes()
+
+
 def main():
     if not (DIST / "index.html").exists():
         print("run: make web")
@@ -89,6 +101,14 @@ def main():
         page.on("request", lambda r: problems.append(f"off-origin request: {r.url}")
                 if not (r.url.startswith(origin) or r.url.startswith("blob:")) else None)
         page.on("dialog", lambda d: d.dismiss())
+        # The page's Content-Security-Policy is a second, browser-enforced
+        # limit on where it can connect. Reported straight to Python so a
+        # violation before the reload below is not lost with the document.
+        page.expose_function("__cspViolation", lambda v: problems.append(f"CSP violation: {v}"))
+        page.add_init_script("""
+          document.addEventListener('securitypolicyviolation', (e) =>
+            window.__cspViolation(`${e.effectiveDirective} blocked ${e.blockedURI || '(inline)'}`));
+        """)
 
         page.goto(f"{origin}/index.html")
 
@@ -182,8 +202,7 @@ def main():
         #    is truncated and would hide a leak past the fold.
         page.click("#exportmanifest")
         expect(page.locator("#mtitle")).to_have_text("Run manifest")
-        manifest = page.evaluate(
-            "async () => (await fetch(document.getElementById('mdownload').href)).text()")
+        manifest = downloaded(page, "#mdownload").decode()
         for leak in ["sum(int", "big-O", "skeleton", "Returns the sum", "Wrong answer",
                      "Complete the method", "States the running time"]:
             if leak in manifest:
@@ -201,8 +220,7 @@ def main():
         expect(page.locator("#mtitle")).to_have_text("Exact query files")
         name = page.locator("#mbody .finding").first.inner_text().split(" ")[0]
         digest = name.removesuffix(".txt").split("-")[-1]
-        query = page.evaluate(
-            "async () => (await fetch(document.querySelector('#mbody a').href)).text()")
+        query = downloaded(page, "#mbody a >> nth=0").decode()
         got = hashlib.sha256(query.encode()).hexdigest()
         if not got.startswith(digest):
             problems.append(f"query file {name} hashes to {got[:8]}, not {digest}")
@@ -227,10 +245,7 @@ def main():
         page.click("#optgo")
         page.wait_for_selector("#mtitle:text('Assignment')", timeout=20000)
         shown = page.locator("#mbody pre").inner_text()
-        pdf = page.evaluate(
-            "async () => { const r = await fetch(document.getElementById('mdownload').href);"
-            " return [...new Uint8Array(await r.arrayBuffer())]; }")
-        pdf = bytes(pdf)
+        pdf = downloaded(page, "#mdownload")
         got = hashlib.sha256(pdf).hexdigest()
         if got not in shown:
             problems.append(f"the assignment digest shown is not the file's ({got[:8]})")
@@ -279,6 +294,10 @@ def main():
             print("    " + " ".join(opened.split())[:150])
         else:
             print("  - no PDF to open (put one in the repository root)")
+
+        csp = page.locator('meta[http-equiv="Content-Security-Policy"]').count()
+        if csp != 1:
+            problems.append(f"expected one CSP meta element, found {csp}")
 
         browser.close()
 
