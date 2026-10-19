@@ -23,6 +23,8 @@ from playwright.sync_api import expect, sync_playwright
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 DIST = ROOT / "dist" / "web"
+AXE = (ROOT / "testing" / "vendor" / "axe" / "axe.min.js").read_text()
+WCAG = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"]
 
 QUESTION = """Complete the method below so that it returns the sum of the array.
 
@@ -71,6 +73,21 @@ def stamp(page, credit, response):
     page.wait_for_timeout(120)
 
 
+def audit(page, where, problems, audited):
+    """WCAG 2.1 A/AA with axe-core, in the state the page is in now.
+
+    Injected through Playwright rather than a <script> tag, so the page's CSP
+    stays enforced while it runs and is not bypassed.
+    """
+    if not page.evaluate("() => typeof axe !== 'undefined'"):
+        page.evaluate(AXE)
+    found = page.evaluate("""async (tags) => (await axe.run(document,
+        {runOnly: {type: 'tag', values: tags}})).violations.map(v =>
+        `${v.id} x${v.nodes.length}: ${v.nodes[0].target.join(' ')}`)""", WCAG)
+    audited.append(where)
+    problems.extend(f"axe ({where}): {v}" for v in found)
+
+
 def downloaded(page, selector):
     """Click a download link and return the bytes the browser saved.
 
@@ -89,6 +106,7 @@ def main():
         return 1
 
     problems = []
+    audited = []
     with served(DIST) as origin, sync_playwright() as p:
         browser = p.chromium.launch()
         page = browser.new_page()
@@ -118,6 +136,7 @@ def main():
         expect(page.locator("#waypdf")).to_be_visible()
         expect(page.locator("#app")).to_be_hidden()
         print("  ✓ opens with somewhere to start")
+        audit(page, 'start', problems, audited)
 
         # 2. Type a question and the run begins.
         page.fill("#firstq", QUESTION)
@@ -126,6 +145,7 @@ def main():
         expect(page.locator(".qcard")).to_have_count(1)
         expect(page.locator(".qcard .tag")).to_have_text("UNTESTED")
         print("  ✓ a typed question starts the run")
+        audit(page, 'run started', problems, audited)
 
         # A question with no rubric cannot be graded — and the page has to say
         # so. An empty space where the panel would be is not an explanation,
@@ -137,6 +157,7 @@ def main():
         if page.evaluate("() => document.activeElement.id") != "chiplabel":
             problems.append("the remedy did not put the cursor in the chip field")
         print("  ✓ a question with no rubric says why it cannot be graded")
+        audit(page, 'no rubric yet', problems, audited)
 
         # 3. Build a rubric out of chips.
         for label, points in [("Returns the sum", 6), ("States the running time", 2),
@@ -147,6 +168,7 @@ def main():
             page.wait_for_timeout(60)
         expect(page.locator(".side .editrow input[data-f=label]")).to_have_count(3)
         print("  ✓ a rubric built chip by chip, 10 points")
+        audit(page, 'rubric built', problems, audited)
 
         # And the way into grading is a control, not a guess. The attempt
         # slots used to look like buttons and do nothing.
@@ -154,6 +176,7 @@ def main():
         page.click("#gradenext")
         expect(page.locator("#response")).to_be_visible()
         print("  ✓ the next attempt slot opens the grading panel")
+        audit(page, 'grading panel open', problems, audited)
 
         # 4. Nothing can be stamped before the target is named.
         expect(page.locator("#stamp")).to_be_disabled()
@@ -162,18 +185,21 @@ def main():
         page.wait_for_timeout(120)
         expect(page.locator("#stamp")).to_be_enabled()
         print("  ✓ the stamp button waits for a named target")
+        audit(page, 'stamp waits for a target', problems, audited)
 
         # 5. Step 3-4: the baseline passes, so the question is not resistant.
         stamp(page, "100", "Here is the full solution with a correct big-O argument.")
         expect(page.locator(".qcard .tag")).to_have_text("NOT RESISTANT")
         expect(page.locator(".banner")).to_contain_text("Step 4")
         print("  ✓ a passing baseline is NOT RESISTANT")
+        audit(page, 'baseline graded', problems, audited)
 
         # The version is locked now, and the rubric with it.
         expect(page.locator("#query")).to_have_attribute("readonly", "")
         if page.locator("#addchip").count():
             problems.append("the rubric stayed editable after the first attempt")
         print("  ✓ the first attempt locks the version and freezes the rubric")
+        audit(page, 'version locked', problems, audited)
 
         # 6. Step 5: perturb.
         page.click(".tab[data-s=spatial]")
@@ -183,6 +209,7 @@ def main():
         page.wait_for_timeout(150)
         expect(page.locator(".tab.sel[data-v]")).to_contain_text("v1")
         print("  ✓ a perturbation saved as v1")
+        audit(page, 'v1 saved', problems, audited)
 
         # 7. Step 8: three failures.
         for i, r in enumerate(["Wrong answer one.", "Wrong answer two.", "Wrong answer three."]):
@@ -192,6 +219,7 @@ def main():
         expect(page.locator(".banner")).to_contain_text("Step 8b")
         expect(page.locator(".stamp .pct")).to_have_count(3)
         print("  ✓ three failures reach RESISTANT")
+        audit(page, 'RESISTANT', problems, audited)
 
         # A fourth is not offered.
         if page.locator("#stamp").count():
@@ -202,6 +230,7 @@ def main():
         #    is truncated and would hide a leak past the fold.
         page.click("#exportmanifest")
         expect(page.locator("#mtitle")).to_have_text("Run manifest")
+        audit(page, 'sheet: Run manifest', problems, audited)
         manifest = downloaded(page, "#mdownload").decode()
         for leak in ["sum(int", "big-O", "skeleton", "Returns the sum", "Wrong answer",
                      "Complete the method", "States the running time"]:
@@ -213,11 +242,13 @@ def main():
                 problems.append(f"the manifest is missing {wanted}")
         page.click("#mclose")
         print("  ✓ the manifest exports, records the run, and carries no question text")
+        audit(page, 'after the manifest', problems, audited)
 
         # 9. The exact-query file is named by the digest the manifest records,
         #    which is the whole basis of a collaborator's `shasum` check.
         page.click("#exportqueries")
         expect(page.locator("#mtitle")).to_have_text("Exact query files")
+        audit(page, 'sheet: Exact query files', problems, audited)
         name = page.locator("#mbody .finding").first.inner_text().split(" ")[0]
         digest = name.removesuffix(".txt").split("-")[-1]
         query = downloaded(page, "#mbody a >> nth=0").decode()
@@ -228,6 +259,7 @@ def main():
             problems.append(f"the manifest does not carry the digest {digest}")
         page.click("#mclose")
         print(f"  ✓ the query file is named by its own digest ({digest}) and the manifest agrees")
+        audit(page, 'after the query files', problems, audited)
 
         # Write both out so the shell can run the README's own recipe on them.
         # A recipe nobody executes is a recipe that stops working quietly.
@@ -240,10 +272,12 @@ def main():
         #     records the digest the file actually has.
         page.click("#exportassignment")
         expect(page.locator("#mtitle")).to_have_text("Export the assignment")
+        audit(page, 'sheet: Export the assignment', problems, audited)
         page.select_option("#optmode", "fullHistory")
         page.fill("#opttitle", "CSC116 Lab 3")
         page.click("#optgo")
         page.wait_for_selector("#mtitle:text('Assignment')", timeout=20000)
+        audit(page, 'sheet: Assignment', problems, audited)
         shown = page.locator("#mbody pre").inner_text()
         pdf = downloaded(page, "#mdownload")
         got = hashlib.sha256(pdf).hexdigest()
@@ -263,6 +297,7 @@ def main():
             problems.append("full history did not include the perturbation strategy")
         page.click("#mclose")
         print(f"  ✓ the assignment is typeset, re-read, and hashed ({got[:8]}, {len(pdf)} bytes)")
+        audit(page, 'after the assignment', problems, audited)
 
         # 11. The run survives a reload.
         page.reload()
@@ -270,6 +305,7 @@ def main():
         expect(page.locator(".qcard .tag")).to_have_text("RESISTANT")
         expect(page.locator("#model")).to_have_value("gemini-2.5-flash")
         print("  ✓ the run survives a reload")
+        audit(page, 'after reload', problems, audited)
 
         # 12. And the other way in: a PDF, split without being told anything
         #     about how this particular assignment numbers its questions.
@@ -285,12 +321,14 @@ def main():
             page.set_input_files("#file", str(pdfs[0]))
             page.wait_for_selector("#mtitle", timeout=30000)
             expect(page.locator("#mtitle")).to_have_text("Opened")
+            audit(page, 'sheet: Opened', problems, audited)
             opened = page.locator("#mbody").inner_text()
             page.click("#mclose")
             count = page.locator(".qcard").count()
             if count < 1:
                 problems.append(f"{pdfs[0].name} produced no questions")
             print(f"  ✓ {pdfs[0].name} split into {count} question(s)")
+            audit(page, 'PDF opened', problems, audited)
             print("    " + " ".join(opened.split())[:150])
         else:
             print("  - no PDF to open (put one in the repository root)")
@@ -300,6 +338,8 @@ def main():
             problems.append(f"expected one CSP meta element, found {csp}")
 
         browser.close()
+    print(f"  axe: {len(audited)} page states audited, "
+          f"{sum(1 for p_ in problems if p_.startswith('axe '))} violation(s)")
 
     if problems:
         print()

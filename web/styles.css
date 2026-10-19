@@ -130,7 +130,8 @@ textarea:read-only { color: #c3c9d8; background: #14161d; }
 .stamp .n { font-family: var(--mono); font-size: 10px; color: var(--dim); }
 .stamp .pct { font-family: var(--mono); font-size: 15px; }
 .stamp .when { font-family: var(--mono); font-size: 10px; color: var(--dim); }
-.stamp.blank { border-style: dashed; opacity: .55; }
+/* Dimmed by colour, not opacity: opacity took the attempt label to 2.7:1. */
+.stamp.blank { border-style: dashed; color: var(--dim); }
 
 .chips { display: grid; gap: 7px; }
 .chiprow { display: grid; grid-template-columns: 1fr auto; gap: 9px; align-items: center;

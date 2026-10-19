@@ -354,7 +354,7 @@ function renderStage() {
         <span class="digest">sha256 <b>${esc(ver.short)}</b>…</span>
       </div>
 
-      <textarea class="query" id="query" spellcheck="false"
+      <textarea class="query" id="query" spellcheck="false" aria-label="Question text"
         ${ver.editable ? '' : 'readonly'}>${esc(ver.text)}</textarea>
 
       <div class="cardhead">
@@ -577,9 +577,9 @@ function renderSide() {
       <div class="chips">
         ${r.chips.map((c) => `
           <div class="editrow">
-            <input value="${esc(c.label)}" data-chip="${esc(c.id)}" data-f="label"
+            <input value="${esc(c.label)}" data-chip="${esc(c.id)}" data-f="label" aria-label="Criterion"
               ${r.frozen ? 'readonly' : ''} class="${c.penalty ? 'penalty' : ''}">
-            <input type="number" value="${c.points}" data-chip="${esc(c.id)}" data-f="points"
+            <input type="number" value="${c.points}" data-chip="${esc(c.id)}" data-f="points" aria-label="Points for this criterion"
               ${r.frozen ? 'readonly' : ''}>
             ${r.frozen ? `<span class="digest" title="${c.from ? `from v${c.from.version} attempt ${c.from.attempt}` : ''}">${c.penalty ? '⊖' : ''}</span>`
                        : `<button class="btn tiny danger" data-drop="${esc(c.id)}">×</button>`}
@@ -588,8 +588,8 @@ function renderSide() {
 
       ${r.frozen ? '' : `
       <form class="editrow" id="addchip">
-        <input id="chiplabel" placeholder="What the answer must show" required>
-        <input id="chippoints" type="number" value="2" min="1" required>
+        <input id="chiplabel" placeholder="What the answer must show" aria-label="New criterion" required>
+        <input id="chippoints" type="number" value="2" min="1" aria-label="Points for the new criterion" required>
         <button class="btn tiny primary" type="submit">+</button>
       </form>`}
 
